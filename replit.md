@@ -1,27 +1,84 @@
-# Workspace
+# ClinicFlow — Hospital & Clinic Management Platform
 
 ## Overview
+A full-stack clinic management platform targeting Middle East & Africa markets. Bilingual-ready (Arabic/English), mobile-friendly, covering three roles: Doctor, Patient, and Pharmacy.
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+## Architecture
 
-## Stack
+### Monorepo Structure
+- `artifacts/clinic-app/` — React + Vite frontend (port via $PORT, preview at `/`)
+- `artifacts/api-server/` — Express API server (port 8080, paths at `/api`)
+- `lib/api-spec/` — OpenAPI spec + Orval codegen config
+- `lib/api-zod/` — Generated Zod schemas and React Query hooks
+- `lib/api-client-react/` — Generated React Query client hooks
+- `lib/db/` — Drizzle ORM schema + PostgreSQL migrations
 
-- **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+### Tech Stack
+- **Frontend**: React 18, Vite, Tailwind CSS v4, shadcn/ui, Wouter routing, TanStack Query, Recharts
+- **Backend**: Express, Drizzle ORM, Zod validation, Pino logging
+- **Database**: PostgreSQL (via DATABASE_URL)
+- **Theme**: Emerald/teal healthcare theme, light + dark mode
 
-## Key Commands
+## Database Schema
+Tables: `patients`, `doctors`, `appointments`, `consultations`, `prescriptions`, `prescription_items`, `medications`, `stock`
 
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/api-server run dev` — run API server locally
+## API Routes (all prefixed `/api`)
+- `GET/POST /patients` — list + create patients
+- `GET/PATCH/DELETE /patients/:id` — patient CRUD
+- `GET /patients/:id/history` — full patient history
+- `GET/POST /doctors` — list + create doctors
+- `GET/PATCH/DELETE /doctors/:id` — doctor CRUD
+- `GET /doctors/:id/schedule` — today's schedule
+- `GET /appointments/today` — today's appointments summary
+- `GET/POST /appointments` — list + create appointments
+- `GET/PATCH/DELETE /appointments/:id`
+- `GET /queue` — today's live queue
+- `POST /queue/:appointmentId/advance` — advance queue status
+- `GET/POST /consultations` — list + create
+- `GET/PATCH /consultations/:id`
+- `GET/POST /prescriptions` — list + create (with items)
+- `GET/PATCH /prescriptions/:id` — includes dispense workflow
+- `GET/POST /medications` — medication catalog
+- `GET/PATCH /medications/:id`
+- `GET/POST /stock` — pharmacy stock
+- `GET /stock/alerts` — low stock + expiring soon
+- `PATCH /stock/:id`
+- `GET /dashboard/stats` — summary KPIs
+- `GET /dashboard/activity` — recent activity feed
 
-See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+## Frontend Pages
+- `/` — Dashboard (stats, bar chart, activity feed — changes by role)
+- `/patients` — Patient list + search + registration + history sidebar
+- `/queue` — Live queue with advance/complete actions (auto-refreshes 15s)
+- `/consultations` — Consultation records with diagnosis/treatment
+- `/prescriptions` — Prescriptions list + pharmacy dispense workflow
+- `/stock` — Pharmacy stock management with low-stock alerts
+- `/appointments` — Appointment list (patient role view)
+
+## Role System
+Three roles via dropdown switcher in sidebar:
+- **Doctor** — Full access: dashboard, patients, queue, consultations, prescriptions
+- **Patient** — Limited: dashboard, appointments, prescriptions
+- **Pharmacy** — Focused: dashboard (Rx/stock KPIs), pending Rx, stock
+
+## Seed Data
+Realistic UAE/MEA clinic data:
+- 5 doctors (Cardiology, General Medicine, Orthopedics, Pediatrics, Dermatology)
+- 6 patients with medical histories
+- 8 medications (Panadol, Augmentin, Amlodipine, Metformin, etc.)
+- 8 appointments for today (various statuses)
+- 3 consultations with vitals and treatment plans
+- 3 prescriptions with items
+- 8 stock entries (4 low stock alerts)
+
+## Codegen
+```bash
+pnpm --filter @workspace/api-spec run codegen
+```
+Generates Zod schemas into `lib/api-zod/src/generated/api.ts`.
+`lib/api-zod/src/index.ts` must only contain: `export * from './generated/api';`
+
+## Environment Variables
+- `DATABASE_URL` — PostgreSQL connection string (set by Replit)
+- `SESSION_SECRET` — Session signing secret
+- `PORT` — Assigned per artifact by Replit workflows
