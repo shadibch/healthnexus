@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stethoscope, User, Activity } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface Consultation {
   id: number;
@@ -23,13 +25,21 @@ interface Consultation {
   updatedAt: string;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  in_progress: "bg-amber-100 text-amber-800 border-amber-300",
-  completed: "bg-emerald-100 text-emerald-800 border-emerald-300",
-  pending: "bg-blue-100 text-blue-800 border-blue-300",
-};
-
 export default function ConsultationsPage() {
+  const { t, isRTL } = useI18n();
+
+  const STATUS_COLORS: Record<string, string> = {
+    in_progress: "bg-amber-100 text-amber-800 border-amber-300",
+    completed:   "bg-emerald-100 text-emerald-800 border-emerald-300",
+    pending:     "bg-blue-100 text-blue-800 border-blue-300",
+  };
+
+  const STATUS_LABELS: Record<string, string> = {
+    in_progress: t("in_progress"),
+    completed:   t("completedStatus"),
+    pending:     t("pending"),
+  };
+
   const { data: consultations, isLoading } = useQuery<Consultation[]>({
     queryKey: ["consultations"],
     queryFn: () => apiFetch("/consultations?limit=30"),
@@ -38,10 +48,10 @@ export default function ConsultationsPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold">Consultations</h1>
+      <div className={cn(isRTL && "text-right")}>
+        <h1 className="text-2xl font-bold">{t("consultations")}</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          {consultations?.length ?? 0} records
+          {consultations?.length ?? 0} {t("records")}
         </p>
       </div>
 
@@ -53,21 +63,18 @@ export default function ConsultationsPage() {
             <Card className="border-dashed border-border">
               <CardContent className="py-16 text-center">
                 <Stethoscope className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">No consultations yet</p>
+                <p className="text-sm text-muted-foreground">{t("noConsultations")}</p>
               </CardContent>
             </Card>
           )
           : consultations?.map((c) => (
               <Card key={c.id} className="border-border">
                 <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-2 mb-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-sm">Consultation #{c.id}</p>
-                      <Badge
-                        variant="outline"
-                        className={STATUS_COLORS[c.status] ?? ""}
-                      >
-                        {c.status.replace("_", " ")}
+                  <div className={cn("flex items-start justify-between gap-2 mb-3", isRTL && "flex-row-reverse")}>
+                    <div className={cn("flex items-center gap-2 flex-wrap", isRTL && "flex-row-reverse")}>
+                      <p className="font-semibold text-sm">#{c.id}</p>
+                      <Badge variant="outline" className={STATUS_COLORS[c.status] ?? ""}>
+                        {STATUS_LABELS[c.status] ?? c.status}
                       </Badge>
                     </div>
                     <span className="text-xs text-muted-foreground shrink-0">
@@ -75,7 +82,7 @@ export default function ConsultationsPage() {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-4 mb-3 flex-wrap">
+                  <div className={cn("flex items-center gap-4 mb-3 flex-wrap", isRTL && "flex-row-reverse")}>
                     {c.patientName && (
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <User className="w-3 h-3" />{c.patientName}
@@ -91,25 +98,25 @@ export default function ConsultationsPage() {
                   <div className="space-y-2">
                     {c.chiefComplaint && (
                       <div className="p-2.5 rounded-lg bg-blue-50 border border-blue-100">
-                        <p className="text-xs font-semibold text-blue-700 mb-0.5">Chief Complaint</p>
-                        <p className="text-sm text-blue-800">{c.chiefComplaint}</p>
+                        <p className={cn("text-xs font-semibold text-blue-700 mb-0.5", isRTL && "text-right")}>{t("chiefComplaint")}</p>
+                        <p className={cn("text-sm text-blue-800", isRTL && "text-right")}>{c.chiefComplaint}</p>
                       </div>
                     )}
                     {c.diagnosis && (
                       <div className="p-2.5 rounded-lg bg-muted/40">
-                        <p className="text-xs font-semibold text-muted-foreground mb-0.5">Diagnosis</p>
-                        <p className="text-sm">{c.diagnosis}</p>
+                        <p className={cn("text-xs font-semibold text-muted-foreground mb-0.5", isRTL && "text-right")}>{t("diagnosis")}</p>
+                        <p className={cn("text-sm", isRTL && "text-right")}>{c.diagnosis}</p>
                       </div>
                     )}
                     {c.treatmentPlan && (
                       <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-100">
-                        <p className="text-xs font-semibold text-emerald-700 mb-0.5">Treatment Plan</p>
-                        <p className="text-sm text-emerald-800">{c.treatmentPlan}</p>
+                        <p className={cn("text-xs font-semibold text-emerald-700 mb-0.5", isRTL && "text-right")}>{t("treatmentPlan")}</p>
+                        <p className={cn("text-sm text-emerald-800", isRTL && "text-right")}>{c.treatmentPlan}</p>
                       </div>
                     )}
                     {c.vitals && (
-                      <div className="flex items-center gap-1.5">
-                        <Activity className="w-3.5 h-3.5 text-muted-foreground" />
+                      <div className={cn("flex items-center gap-1.5", isRTL && "flex-row-reverse")}>
+                        <Activity className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                         <p className="text-xs text-muted-foreground">{c.vitals}</p>
                       </div>
                     )}

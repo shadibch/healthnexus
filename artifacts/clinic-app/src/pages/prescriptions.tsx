@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useRole } from "@/lib/role";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useI18n } from "@/lib/i18n";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,115 +43,14 @@ interface Prescription {
   items: PrescriptionItem[];
 }
 
-const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode }> = {
-  pending: { label: "Pending", variant: "secondary", icon: <Clock className="w-3 h-3" /> },
-  dispensed: { label: "Dispensed", variant: "default", icon: <CheckCircle2 className="w-3 h-3" /> },
-  cancelled: { label: "Cancelled", variant: "destructive", icon: null },
-};
-
-function PrescriptionCard({
-  rx,
-  onDispense,
-  dispensing,
-  role,
-}: {
-  rx: Prescription;
-  onDispense?: () => void;
-  dispensing: boolean;
-  role: string;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const cfg = STATUS_CONFIG[rx.status] ?? STATUS_CONFIG.pending;
-
-  return (
-    <Card className="border-border">
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center shrink-0">
-              <FileText className="w-4.5 h-4.5 text-violet-600" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-semibold text-sm">Rx #{rx.id}</p>
-                <Badge variant={cfg.variant} className="text-xs gap-1">
-                  {cfg.icon}
-                  {cfg.label}
-                </Badge>
-              </div>
-              <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                {rx.patientName && (
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <User className="w-3 h-3" />{rx.patientName}
-                  </span>
-                )}
-                {rx.doctorName && (
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Stethoscope className="w-3 h-3" />{rx.doctorName}
-                  </span>
-                )}
-                <span className="text-xs text-muted-foreground">
-                  {formatDistanceToNow(new Date(rx.issuedAt), { addSuffix: true })}
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {role === "pharmacy" && rx.status === "pending" && (
-              <Button size="sm" onClick={onDispense} disabled={dispensing} className="text-xs">
-                {dispensing ? "..." : "Dispense"}
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setExpanded(!expanded)}
-              className="text-xs"
-            >
-              {expanded ? "Less" : `${rx.items.length} items`}
-            </Button>
-          </div>
-        </div>
-
-        {expanded && (
-          <div className="mt-3 space-y-2 pt-3 border-t border-border">
-            {rx.items.map((item) => (
-              <div key={item.id} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-muted/40">
-                <Pill className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium">{item.medicationName ?? `Med #${item.medicationId}`}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {item.dosage} · {item.frequency}
-                    {item.duration ? ` · ${item.duration}` : ""}
-                    {" · "}Qty: {item.quantity}
-                  </p>
-                  {item.instructions && (
-                    <p className="text-xs text-muted-foreground italic mt-0.5">{item.instructions}</p>
-                  )}
-                </div>
-              </div>
-            ))}
-            {rx.notes && (
-              <p className="text-xs text-muted-foreground italic px-1">Note: {rx.notes}</p>
-            )}
-            {rx.dispensedAt && (
-              <p className="text-xs text-emerald-600 px-1">
-                Dispensed {formatDistanceToNow(new Date(rx.dispensedAt), { addSuffix: true })}
-              </p>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 export default function PrescriptionsPage() {
   const { role } = useRole();
+  const { t, isRTL } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dispensing, setDispensing] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   const { data: prescriptions, isLoading } = useQuery<Prescription[]>({
     queryKey: ["prescriptions", statusFilter],
@@ -167,26 +67,40 @@ export default function PrescriptionsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["prescriptions"] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
-      toast({ title: "Prescription dispensed successfully" });
+      toast({ title: t("dispensedSuccessfully") });
       setDispensing(null);
     },
     onError: (e: Error) => {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
+      toast({ title: t("error"), description: e.message, variant: "destructive" });
       setDispensing(null);
     },
   });
+
+  const toggleExpand = (id: number) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode }> = {
+    pending:   { label: t("pending"),   variant: "secondary",    icon: <Clock className="w-3 h-3" /> },
+    dispensed: { label: t("dispensed"), variant: "default",      icon: <CheckCircle2 className="w-3 h-3" /> },
+    cancelled: { label: t("cancelled"), variant: "destructive",  icon: null },
+  };
 
   const pending = prescriptions?.filter((r) => r.status === "pending").length ?? 0;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className={cn("flex items-center justify-between", isRTL && "flex-row-reverse")}>
+        <div className={cn(isRTL && "text-right")}>
           <h1 className="text-2xl font-bold">
-            {role === "pharmacy" ? "Pending Prescriptions" : "Prescriptions"}
+            {role === "pharmacy" ? t("pendingRx") : t("prescriptions")}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {pending > 0 ? `${pending} pending dispensing` : "All prescriptions"}
+            {pending > 0 ? `${pending} ${t("pendingDispensing")}` : t("allPrescriptions")}
           </p>
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -194,10 +108,10 @@ export default function PrescriptionsPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="dispensed">Dispensed</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
+            <SelectItem value="all">{t("all")}</SelectItem>
+            <SelectItem value="pending">{t("pending")}</SelectItem>
+            <SelectItem value="dispensed">{t("dispensed")}</SelectItem>
+            <SelectItem value="cancelled">{t("cancelled")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -210,22 +124,94 @@ export default function PrescriptionsPage() {
             <Card className="border-dashed border-border">
               <CardContent className="py-16 text-center">
                 <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">No prescriptions found</p>
+                <p className="text-sm text-muted-foreground">{t("noPrescriptions")}</p>
               </CardContent>
             </Card>
           )
-          : prescriptions?.map((rx) => (
-              <PrescriptionCard
-                key={rx.id}
-                rx={rx}
-                role={role}
-                dispensing={dispensing === rx.id}
-                onDispense={() => {
-                  setDispensing(rx.id);
-                  dispenseMutation.mutate(rx.id);
-                }}
-              />
-            ))}
+          : prescriptions?.map((rx) => {
+              const cfg = STATUS_CONFIG[rx.status] ?? STATUS_CONFIG.pending;
+              const isExpanded = expanded.has(rx.id);
+              return (
+                <Card key={rx.id} className="border-border">
+                  <CardContent className="p-4">
+                    <div className={cn("flex items-start justify-between gap-2", isRTL && "flex-row-reverse")}>
+                      <div className={cn("flex items-start gap-3", isRTL && "flex-row-reverse")}>
+                        <div className="w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center shrink-0">
+                          <FileText className="w-4.5 h-4.5 text-violet-600" />
+                        </div>
+                        <div className={cn(isRTL && "text-right")}>
+                          <div className={cn("flex items-center gap-2 flex-wrap", isRTL && "flex-row-reverse")}>
+                            <p className="font-semibold text-sm">Rx #{rx.id}</p>
+                            <Badge variant={cfg.variant} className="text-xs gap-1">
+                              {cfg.icon}{cfg.label}
+                            </Badge>
+                          </div>
+                          <div className={cn("flex items-center gap-3 mt-0.5 flex-wrap", isRTL && "flex-row-reverse")}>
+                            {rx.patientName && (
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <User className="w-3 h-3" />{rx.patientName}
+                              </span>
+                            )}
+                            {rx.doctorName && (
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Stethoscope className="w-3 h-3" />{rx.doctorName}
+                              </span>
+                            )}
+                            <span className="text-xs text-muted-foreground">
+                              {formatDistanceToNow(new Date(rx.issuedAt), { addSuffix: true })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className={cn("flex items-center gap-2 shrink-0", isRTL && "flex-row-reverse")}>
+                        {role === "pharmacy" && rx.status === "pending" && (
+                          <Button size="sm" onClick={() => {
+                            setDispensing(rx.id);
+                            dispenseMutation.mutate(rx.id);
+                          }} disabled={dispensing === rx.id} className="text-xs">
+                            {dispensing === rx.id ? "..." : t("dispense")}
+                          </Button>
+                        )}
+                        <Button size="sm" variant="ghost" onClick={() => toggleExpand(rx.id)} className="text-xs">
+                          {isExpanded ? "↑" : `${rx.items.length} ${t("items")}`}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="mt-3 space-y-2 pt-3 border-t border-border">
+                        {rx.items.map((item) => (
+                          <div key={item.id} className={cn("flex items-start gap-2.5 p-2.5 rounded-lg bg-muted/40", isRTL && "flex-row-reverse")}>
+                            <Pill className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+                            <div className={cn("flex-1", isRTL && "text-right")}>
+                              <p className="text-sm font-medium">{item.medicationName ?? `Med #${item.medicationId}`}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {item.dosage} · {item.frequency}
+                                {item.duration ? ` · ${item.duration}` : ""}
+                                {" · "}{t("qty")}: {item.quantity}
+                              </p>
+                              {item.instructions && (
+                                <p className="text-xs text-muted-foreground italic mt-0.5">{item.instructions}</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                        {rx.notes && (
+                          <p className={cn("text-xs text-muted-foreground italic px-1", isRTL && "text-right")}>
+                            {t("note")}: {rx.notes}
+                          </p>
+                        )}
+                        {rx.dispensedAt && (
+                          <p className={cn("text-xs text-emerald-600 px-1", isRTL && "text-right")}>
+                            {t("dispensed")} {formatDistanceToNow(new Date(rx.dispensedAt), { addSuffix: true })}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
       </div>
     </div>
   );

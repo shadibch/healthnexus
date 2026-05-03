@@ -55,8 +55,26 @@ Tables: `patients`, `doctors`, `appointments`, `consultations`, `prescriptions`,
 - `/stock` — Pharmacy stock management with low-stock alerts
 - `/appointments` — Appointment list (patient role view)
 
+## Authentication
+Session-based auth via `express-session` + `SESSION_SECRET` env var.
+
+Demo accounts (auto-populate from login page):
+- `doctor@clinicflow.ae` / `doctor123` → Doctor View
+- `patient@clinicflow.ae` / `patient123` → Patient View
+- `pharmacy@clinicflow.ae` / `pharmacy123` → Pharmacy View
+
+API routes: `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`
+Frontend: `AuthProvider` + `useAuth` in `artifacts/clinic-app/src/lib/auth.tsx`
+
+## Internationalization (i18n)
+Full EN/AR bilingual support with RTL layout.
+- `artifacts/clinic-app/src/lib/i18n.tsx` — I18nProvider, useI18n hook, full translations
+- Language toggle on login page and in sidebar footer
+- RTL applied via `document.dir` + `dir` prop on Layout wrapper
+- Language preference persisted in `localStorage` key `cf-lang`
+
 ## Role System
-Three roles via dropdown switcher in sidebar:
+Three roles — set automatically from login, switchable via sidebar dropdown:
 - **Doctor** — Full access: dashboard, patients, queue, consultations, prescriptions
 - **Patient** — Limited: dashboard, appointments, prescriptions
 - **Pharmacy** — Focused: dashboard (Rx/stock KPIs), pending Rx, stock

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useRole } from "@/lib/role";
+import { useI18n } from "@/lib/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,6 +25,7 @@ import {
   Cell,
 } from "recharts";
 import { formatDistanceToNow } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface DashboardStats {
   totalPatients: number;
@@ -66,6 +68,8 @@ const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
 
 export default function DashboardPage() {
   const { role } = useRole();
+  const { t, isRTL } = useI18n();
+
   const { data: stats, isLoading: loadingStats } = useQuery<DashboardStats>({
     queryKey: ["dashboard-stats"],
     queryFn: () => apiFetch("/dashboard/stats"),
@@ -79,32 +83,34 @@ export default function DashboardPage() {
 
   const statCards = role === "pharmacy"
     ? [
-        { label: "Pending Rx", value: stats?.prescriptionsPending, icon: FileText, color: "text-violet-500" },
-        { label: "Low Stock Alerts", value: stats?.lowStockAlerts, icon: AlertTriangle, color: "text-amber-500" },
-        { label: "Total Patients", value: stats?.totalPatients, icon: Users, color: "text-blue-500" },
+        { label: t("pendingRxCount"), value: stats?.prescriptionsPending, icon: FileText, color: "text-violet-500" },
+        { label: t("lowStockAlerts"), value: stats?.lowStockAlerts, icon: AlertTriangle, color: "text-amber-500" },
+        { label: t("totalPatients"), value: stats?.totalPatients, icon: Users, color: "text-blue-500" },
       ]
     : role === "patient"
     ? [
-        { label: "Appointments Today", value: stats?.appointmentsToday, icon: CalendarClock, color: "text-blue-500" },
-        { label: "Pending Prescriptions", value: stats?.prescriptionsPending, icon: FileText, color: "text-violet-500" },
+        { label: t("appointmentsToday"), value: stats?.appointmentsToday, icon: CalendarClock, color: "text-blue-500" },
+        { label: t("pendingRxCount"), value: stats?.prescriptionsPending, icon: FileText, color: "text-violet-500" },
       ]
     : [
-        { label: "Total Patients", value: stats?.totalPatients, icon: Users, color: "text-blue-500" },
-        { label: "Doctors", value: stats?.totalDoctors, icon: UserCheck, color: "text-emerald-500" },
-        { label: "Today's Appointments", value: stats?.appointmentsToday, icon: CalendarClock, color: "text-indigo-500" },
-        { label: "Completed Today", value: stats?.appointmentsCompleted, icon: CheckCircle2, color: "text-emerald-500" },
-        { label: "Pending", value: stats?.appointmentsPending, icon: Clock, color: "text-amber-500" },
-        { label: "Pending Rx", value: stats?.prescriptionsPending, icon: FileText, color: "text-violet-500" },
-        { label: "Low Stock Alerts", value: stats?.lowStockAlerts, icon: AlertTriangle, color: "text-red-500" },
-        { label: "Consultations/Month", value: stats?.totalConsultationsThisMonth, icon: Activity, color: "text-teal-500" },
+        { label: t("totalPatients"), value: stats?.totalPatients, icon: Users, color: "text-blue-500" },
+        { label: t("doctors"), value: stats?.totalDoctors, icon: UserCheck, color: "text-emerald-500" },
+        { label: t("appointmentsToday"), value: stats?.appointmentsToday, icon: CalendarClock, color: "text-indigo-500" },
+        { label: t("completedToday"), value: stats?.appointmentsCompleted, icon: CheckCircle2, color: "text-emerald-500" },
+        { label: t("pending"), value: stats?.appointmentsPending, icon: Clock, color: "text-amber-500" },
+        { label: t("pendingRxCount"), value: stats?.prescriptionsPending, icon: FileText, color: "text-violet-500" },
+        { label: t("lowStockAlerts"), value: stats?.lowStockAlerts, icon: AlertTriangle, color: "text-red-500" },
+        { label: t("consultationsMonth"), value: stats?.totalConsultationsThisMonth, icon: Activity, color: "text-teal-500" },
       ];
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+      <div className={cn(isRTL && "text-right")}>
+        <h1 className="text-2xl font-bold text-foreground">{t("dashboard")}</h1>
         <p className="text-muted-foreground text-sm mt-0.5">
-          {new Date().toLocaleDateString("en-AE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+          {new Date().toLocaleDateString(isRTL ? "ar-AE" : "en-AE", {
+            weekday: "long", year: "numeric", month: "long", day: "numeric",
+          })}
         </p>
       </div>
 
@@ -112,8 +118,8 @@ export default function DashboardPage() {
         {statCards.map(({ label, value, icon: Icon, color }) => (
           <Card key={label} className="border-border">
             <CardContent className="p-4">
-              <div className="flex items-start justify-between">
-                <div>
+              <div className={cn("flex items-start justify-between", isRTL && "flex-row-reverse")}>
+                <div className={cn(isRTL && "text-right")}>
                   <p className="text-xs text-muted-foreground font-medium">{label}</p>
                   {loadingStats ? (
                     <Skeleton className="h-8 w-12 mt-1" />
@@ -132,7 +138,7 @@ export default function DashboardPage() {
         {role === "doctor" && (
           <Card className="border-border">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">Today's Appointments by Status</CardTitle>
+              <CardTitle className={cn("text-sm font-semibold", isRTL && "text-right")}>{t("appointmentsByStatus")}</CardTitle>
             </CardHeader>
             <CardContent>
               {loadingStats ? (
@@ -158,18 +164,18 @@ export default function DashboardPage() {
         {role === "doctor" && (
           <Card className="border-border">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">Top Specializations</CardTitle>
+              <CardTitle className={cn("text-sm font-semibold", isRTL && "text-right")}>{t("topSpecializations")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               {loadingStats
                 ? [1, 2, 3].map((i) => <Skeleton key={i} className="h-8 w-full" />)
                 : stats?.topSpecializations.map((s) => (
-                    <div key={s.specialization} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                    <div key={s.specialization} className={cn("flex items-center justify-between", isRTL && "flex-row-reverse")}>
+                      <div className={cn("flex items-center gap-2", isRTL && "flex-row-reverse")}>
                         <span className="text-sm font-medium">{s.specialization}</span>
-                        <Badge variant="secondary" className="text-xs">{s.doctorCount} doctors</Badge>
+                        <Badge variant="secondary" className="text-xs">{s.doctorCount} {t("doctorsCount")}</Badge>
                       </div>
-                      <span className="text-sm text-muted-foreground font-mono">{s.count} appts</span>
+                      <span className="text-sm text-muted-foreground font-mono">{s.count} {t("appts")}</span>
                     </div>
                   ))}
             </CardContent>
@@ -178,7 +184,7 @@ export default function DashboardPage() {
 
         <Card className={`border-border ${role !== "doctor" ? "md:col-span-2" : ""}`}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Recent Activity</CardTitle>
+            <CardTitle className={cn("text-sm font-semibold", isRTL && "text-right")}>{t("recentActivity")}</CardTitle>
           </CardHeader>
           <CardContent>
             {loadingActivity ? (
@@ -186,15 +192,15 @@ export default function DashboardPage() {
                 {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
               </div>
             ) : !activity?.length ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No recent activity</p>
+              <p className="text-sm text-muted-foreground text-center py-6">{t("noRecentActivity")}</p>
             ) : (
               <div className="space-y-3">
                 {activity.map((item) => (
-                  <div key={item.id} className="flex items-start gap-3">
+                  <div key={item.id} className={cn("flex items-start gap-3", isRTL && "flex-row-reverse")}>
                     <div className="mt-0.5 shrink-0">
                       {ACTIVITY_ICONS[item.type] ?? <Activity className="w-4 h-4 text-muted-foreground" />}
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className={cn("flex-1 min-w-0", isRTL && "text-right")}>
                       <p className="text-sm font-medium truncate">{item.description}</p>
                       <p className="text-xs text-muted-foreground">
                         {item.patientName && <span>{item.patientName}</span>}

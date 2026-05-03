@@ -7,8 +7,8 @@ const RoleContext = createContext<{
   setRole: (r: Role) => void;
 }>({ role: "doctor", setRole: () => {} });
 
-export function RoleProvider({ children }: { children: ReactNode }) {
-  const [role, setRole] = useState<Role>("doctor");
+export function RoleProvider({ children, initialRole }: { children: ReactNode; initialRole?: Role }) {
+  const [role, setRole] = useState<Role>(initialRole ?? "doctor");
   return <RoleContext.Provider value={{ role, setRole }}>{children}</RoleContext.Provider>;
 }
 
