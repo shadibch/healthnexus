@@ -10,6 +10,7 @@ import prescriptionsRouter from "./prescriptions";
 import medicationsRouter from "./medications";
 import stockRouter from "./stock";
 import dashboardRouter from "./dashboard";
+import ordersRouter from "./orders";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(prescriptionsRouter);
 router.use(medicationsRouter);
 router.use(stockRouter);
 router.use(dashboardRouter);
+router.use(ordersRouter);
 
 export default router;

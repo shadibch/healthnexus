@@ -7,9 +7,12 @@ declare module "express-session" {
     role: "doctor" | "patient" | "pharmacy";
     name: string;
     email: string;
+    doctorDbId: number | null;
+    patientDbId: number | null;
   }
 }
 
+// Demo users mapped to real DB records (seed data: doctor ID=1, patient ID=1)
 const DEMO_USERS: Record<string, {
   id: string;
   name: string;
@@ -18,6 +21,8 @@ const DEMO_USERS: Record<string, {
   role: "doctor" | "patient" | "pharmacy";
   title?: string;
   specialization?: string;
+  doctorDbId: number | null;
+  patientDbId: number | null;
 }> = {
   "doctor@clinicflow.ae": {
     id: "demo-doctor-1",
@@ -27,6 +32,8 @@ const DEMO_USERS: Record<string, {
     role: "doctor",
     title: "Senior Cardiologist",
     specialization: "Cardiology",
+    doctorDbId: 1,
+    patientDbId: null,
   },
   "patient@clinicflow.ae": {
     id: "demo-patient-1",
@@ -34,6 +41,8 @@ const DEMO_USERS: Record<string, {
     email: "patient@clinicflow.ae",
     password: "patient123",
     role: "patient",
+    doctorDbId: null,
+    patientDbId: 1,
   },
   "pharmacy@clinicflow.ae": {
     id: "demo-pharmacy-1",
@@ -42,6 +51,8 @@ const DEMO_USERS: Record<string, {
     password: "pharmacy123",
     role: "pharmacy",
     title: "Head Pharmacist",
+    doctorDbId: null,
+    patientDbId: null,
   },
 };
 
@@ -58,10 +69,13 @@ router.post("/auth/login", (req, res): void => {
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
-  (req as Request & { session: any }).session.userId = user.id;
-  (req as Request & { session: any }).session.role = user.role;
-  (req as Request & { session: any }).session.name = user.name;
-  (req as Request & { session: any }).session.email = user.email;
+  const sess = (req as Request & { session: any }).session;
+  sess.userId = user.id;
+  sess.role = user.role;
+  sess.name = user.name;
+  sess.email = user.email;
+  sess.doctorDbId = user.doctorDbId;
+  sess.patientDbId = user.patientDbId;
   res.json({
     id: user.id,
     name: user.name,
@@ -69,6 +83,8 @@ router.post("/auth/login", (req, res): void => {
     role: user.role,
     title: user.title ?? null,
     specialization: user.specialization ?? null,
+    doctorDbId: user.doctorDbId,
+    patientDbId: user.patientDbId,
   });
 });
 
@@ -96,6 +112,8 @@ router.get("/auth/me", (req, res): void => {
     role: user.role,
     title: user.title ?? null,
     specialization: user.specialization ?? null,
+    doctorDbId: user.doctorDbId,
+    patientDbId: user.patientDbId,
   });
 });
 

@@ -1,18 +1,14 @@
 import { Router, type IRouter } from "express";
 import { eq, and, gte, lt } from "drizzle-orm";
 import { db, appointmentsTable, patientsTable, doctorsTable } from "@workspace/db";
-import { ListQueueQueryParams, AdvanceQueueParams } from "@workspace/api-zod";
+import { AdvanceQueueParams } from "@workspace/api-zod";
+import { requireAuth, getSessionUser } from "../lib/session";
 
 const router: IRouter = Router();
-
 const STATUS_ORDER = ["scheduled", "confirmed", "in_progress", "completed"];
 
-router.get("/queue", async (req, res): Promise<void> => {
-  const parsed = ListQueueQueryParams.safeParse(req.query);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+router.get("/queue", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
 
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -28,8 +24,11 @@ router.get("/queue", async (req, res): Promise<void> => {
     .from(appointmentsTable)
     .where(and(gte(appointmentsTable.scheduledAt, todayStart), lt(appointmentsTable.scheduledAt, todayEnd)));
 
-  if (parsed.data.doctorId) {
-    appointments = appointments.filter((a) => a.doctorId === parsed.data.doctorId);
+  // Doctor sees only their own queue; pharmacy/admin sees all
+  if (session.role === "doctor" && session.doctorDbId != null) {
+    appointments = appointments.filter((a) => a.doctorId === session.doctorDbId);
+  } else if (session.role === "patient" && session.patientDbId != null) {
+    appointments = appointments.filter((a) => a.patientId === session.patientDbId);
   }
 
   const active = appointments.filter((a) => !["cancelled", "no_show", "completed"].includes(a.status));
@@ -48,13 +47,15 @@ router.get("/queue", async (req, res): Promise<void> => {
       status: a.status,
       scheduledAt: a.scheduledAt,
       type: a.type,
+      notes: a.notes,
       waitingCount,
     }));
 
   res.json(queue);
 });
 
-router.post("/queue/:appointmentId/advance", async (req, res): Promise<void> => {
+router.post("/queue/:appointmentId/advance", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
   const params = AdvanceQueueParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -67,6 +68,12 @@ router.post("/queue/:appointmentId/advance", async (req, res): Promise<void> => 
     .where(eq(appointmentsTable.id, params.data.appointmentId));
   if (!appointment) {
     res.status(404).json({ error: "Appointment not found" });
+    return;
+  }
+
+  // Only the assigned doctor can advance their own queue
+  if (session.role === "doctor" && session.doctorDbId !== appointment.doctorId) {
+    res.status(403).json({ error: "Not authorized to manage this appointment" });
     return;
   }
 
@@ -105,6 +112,7 @@ router.post("/queue/:appointmentId/advance", async (req, res): Promise<void> => 
     status: updated.status,
     scheduledAt: updated.scheduledAt,
     type: updated.type,
+    notes: updated.notes,
     waitingCount,
   });
 });

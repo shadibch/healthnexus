@@ -7,6 +7,8 @@ export const consultationsTable = pgTable("consultations", {
   appointmentId: integer("appointment_id").notNull(),
   patientId: integer("patient_id").notNull(),
   doctorId: integer("doctor_id").notNull(),
+  parentConsultationId: integer("parent_consultation_id"),
+  encounterType: text("encounter_type").notNull().default("initial"), // initial | follow_up | emergency
   chiefComplaint: text("chief_complaint"),
   diagnosis: text("diagnosis"),
   treatmentPlan: text("treatment_plan"),

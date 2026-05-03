@@ -8,6 +8,7 @@ import {
   UpdatePrescriptionParams,
   UpdatePrescriptionBody,
 } from "@workspace/api-zod";
+import { requireAuth, getSessionUser } from "../lib/session";
 
 const router: IRouter = Router();
 
@@ -41,7 +42,8 @@ async function enrichPrescription(
   };
 }
 
-router.get("/prescriptions", async (req, res): Promise<void> => {
+router.get("/prescriptions", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
   const parsed = ListPrescriptionsQueryParams.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -55,9 +57,17 @@ router.get("/prescriptions", async (req, res): Promise<void> => {
 
   let all = await db.select().from(prescriptionsTable).orderBy(prescriptionsTable.issuedAt);
 
+  // Role-based isolation
+  if (session.role === "patient" && session.patientDbId != null) {
+    all = all.filter((p) => p.patientId === session.patientDbId);
+  } else if (session.role === "doctor" && session.doctorDbId != null) {
+    all = all.filter((p) => p.doctorId === session.doctorDbId);
+  }
+  // pharmacy sees all prescriptions
+
   const { patientId, doctorId, status, limit = 20 } = parsed.data;
-  if (patientId) all = all.filter((p) => p.patientId === patientId);
-  if (doctorId) all = all.filter((p) => p.doctorId === doctorId);
+  if (patientId && session.role !== "patient") all = all.filter((p) => p.patientId === patientId);
+  if (doctorId && session.role !== "doctor") all = all.filter((p) => p.doctorId === doctorId);
   if (status) all = all.filter((p) => p.status === status);
 
   const sliced = all.slice(0, limit);
@@ -65,7 +75,13 @@ router.get("/prescriptions", async (req, res): Promise<void> => {
   res.json(enriched);
 });
 
-router.post("/prescriptions", async (req, res): Promise<void> => {
+router.post("/prescriptions", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
+  if (session.role === "patient") {
+    res.status(403).json({ error: "Patients cannot create prescriptions" });
+    return;
+  }
+
   const parsed = CreatePrescriptionBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -93,7 +109,8 @@ router.post("/prescriptions", async (req, res): Promise<void> => {
   res.status(201).json(enriched);
 });
 
-router.get("/prescriptions/:id", async (req, res): Promise<void> => {
+router.get("/prescriptions/:id", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
   const params = GetPrescriptionParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -108,6 +125,16 @@ router.get("/prescriptions/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  // Access control
+  if (session.role === "patient" && session.patientDbId !== prescription.patientId) {
+    res.status(403).json({ error: "Not your prescription" });
+    return;
+  }
+  if (session.role === "doctor" && session.doctorDbId !== prescription.doctorId) {
+    res.status(403).json({ error: "Not your prescription" });
+    return;
+  }
+
   const patients = await db.select().from(patientsTable);
   const patientMap = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
   const doctors = await db.select().from(doctorsTable);
@@ -116,7 +143,13 @@ router.get("/prescriptions/:id", async (req, res): Promise<void> => {
   res.json(await enrichPrescription(prescription, patientMap, doctorMap));
 });
 
-router.patch("/prescriptions/:id", async (req, res): Promise<void> => {
+router.patch("/prescriptions/:id", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
+  if (session.role === "patient") {
+    res.status(403).json({ error: "Patients cannot modify prescriptions" });
+    return;
+  }
+
   const params = UpdatePrescriptionParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });

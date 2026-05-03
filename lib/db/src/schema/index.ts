@@ -5,3 +5,4 @@ export * from "./consultations";
 export * from "./prescriptions";
 export * from "./medications";
 export * from "./stock";
+export * from "./medical-orders";

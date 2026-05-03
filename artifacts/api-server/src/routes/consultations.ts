@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
-import { db, consultationsTable, patientsTable, doctorsTable } from "@workspace/db";
+import { eq, desc, lt, and } from "drizzle-orm";
+import { db, consultationsTable, patientsTable, doctorsTable, medicalOrdersTable } from "@workspace/db";
 import {
   ListConsultationsQueryParams,
   CreateConsultationBody,
@@ -8,22 +8,35 @@ import {
   UpdateConsultationParams,
   UpdateConsultationBody,
 } from "@workspace/api-zod";
+import { requireAuth, getSessionUser } from "../lib/session";
 
 const router: IRouter = Router();
 
-router.get("/consultations", async (req, res): Promise<void> => {
+async function getMaps() {
+  const patients = await db.select().from(patientsTable);
+  const patientMap = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
+  const doctors = await db.select().from(doctorsTable);
+  const doctorMap = new Map(doctors.map((d) => [d.id, `Dr. ${d.firstName} ${d.lastName}`]));
+  return { patientMap, doctorMap };
+}
+
+router.get("/consultations", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
   const parsed = ListConsultationsQueryParams.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
 
-  const patients = await db.select().from(patientsTable);
-  const patientMap = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
-  const doctors = await db.select().from(doctorsTable);
-  const doctorMap = new Map(doctors.map((d) => [d.id, `Dr. ${d.firstName} ${d.lastName}`]));
+  const { patientMap, doctorMap } = await getMaps();
+  let all = await db.select().from(consultationsTable).orderBy(desc(consultationsTable.createdAt));
 
-  let all = await db.select().from(consultationsTable).orderBy(consultationsTable.createdAt);
+  // Role-based isolation
+  if (session.role === "doctor" && session.doctorDbId != null) {
+    all = all.filter((c) => c.doctorId === session.doctorDbId);
+  } else if (session.role === "patient" && session.patientDbId != null) {
+    all = all.filter((c) => c.patientId === session.patientDbId);
+  }
 
   const { patientId, doctorId, limit = 20 } = parsed.data;
   if (patientId) all = all.filter((c) => c.patientId === patientId);
@@ -39,27 +52,61 @@ router.get("/consultations", async (req, res): Promise<void> => {
   );
 });
 
-router.post("/consultations", async (req, res): Promise<void> => {
+// Create consultation/encounter with 7-day follow-up detection
+router.post("/consultations", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
+  if (session.role !== "doctor") {
+    res.status(403).json({ error: "Only doctors can create consultations" });
+    return;
+  }
+
   const parsed = CreateConsultationBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [consultation] = await db.insert(consultationsTable).values(parsed.data).returning();
 
-  const patients = await db.select().from(patientsTable);
-  const patientMap = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
-  const doctors = await db.select().from(doctorsTable);
-  const doctorMap = new Map(doctors.map((d) => [d.id, `Dr. ${d.firstName} ${d.lastName}`]));
+  const { patientId, doctorId } = parsed.data as any;
 
+  // 7-day follow-up detection: find the patient's most recent consultation
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const recentConsultations = await db
+    .select()
+    .from(consultationsTable)
+    .where(
+      and(
+        eq(consultationsTable.patientId, patientId),
+        // created within the last 7 days
+        lt(sevenDaysAgo, consultationsTable.createdAt)
+      )
+    )
+    .orderBy(desc(consultationsTable.createdAt))
+    .limit(1);
+
+  let parentConsultationId: number | null = null;
+  let encounterType = (parsed.data as any).encounterType ?? "initial";
+
+  if (recentConsultations.length > 0) {
+    parentConsultationId = recentConsultations[0].id;
+    encounterType = "follow_up";
+  }
+
+  const [consultation] = await db
+    .insert(consultationsTable)
+    .values({ ...parsed.data, parentConsultationId, encounterType })
+    .returning();
+
+  const { patientMap, doctorMap } = await getMaps();
   res.status(201).json({
     ...consultation,
     patientName: patientMap.get(consultation.patientId) ?? null,
     doctorName: doctorMap.get(consultation.doctorId) ?? null,
+    isFollowUp: parentConsultationId != null,
   });
 });
 
-router.get("/consultations/:id", async (req, res): Promise<void> => {
+router.get("/consultations/:id", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
   const params = GetConsultationParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -74,19 +121,36 @@ router.get("/consultations/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const patients = await db.select().from(patientsTable);
-  const patientMap = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
-  const doctors = await db.select().from(doctorsTable);
-  const doctorMap = new Map(doctors.map((d) => [d.id, `Dr. ${d.firstName} ${d.lastName}`]));
+  // Patients can only see their own consultations
+  if (session.role === "patient" && session.patientDbId !== consultation.patientId) {
+    res.status(403).json({ error: "Not your consultation" });
+    return;
+  }
+
+  const { patientMap, doctorMap } = await getMaps();
+
+  // Fetch medical orders for this consultation
+  const orders = await db
+    .select()
+    .from(medicalOrdersTable)
+    .where(eq(medicalOrdersTable.consultationId, consultation.id))
+    .orderBy(medicalOrdersTable.orderedAt);
 
   res.json({
     ...consultation,
     patientName: patientMap.get(consultation.patientId) ?? null,
     doctorName: doctorMap.get(consultation.doctorId) ?? null,
+    orders,
   });
 });
 
-router.patch("/consultations/:id", async (req, res): Promise<void> => {
+router.patch("/consultations/:id", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
+  if (session.role !== "doctor") {
+    res.status(403).json({ error: "Only doctors can update consultations" });
+    return;
+  }
+
   const params = UpdateConsultationParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -97,6 +161,7 @@ router.patch("/consultations/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+
   const [consultation] = await db
     .update(consultationsTable)
     .set(parsed.data)
@@ -107,16 +172,62 @@ router.patch("/consultations/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const patients = await db.select().from(patientsTable);
-  const patientMap = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
-  const doctors = await db.select().from(doctorsTable);
-  const doctorMap = new Map(doctors.map((d) => [d.id, `Dr. ${d.firstName} ${d.lastName}`]));
-
+  const { patientMap, doctorMap } = await getMaps();
   res.json({
     ...consultation,
     patientName: patientMap.get(consultation.patientId) ?? null,
     doctorName: doctorMap.get(consultation.doctorId) ?? null,
   });
+});
+
+// Medical orders for a consultation
+router.get("/consultations/:id/orders", requireAuth, async (req, res): Promise<void> => {
+  const idNum = parseInt(req.params.id);
+  if (isNaN(idNum)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const orders = await db
+    .select()
+    .from(medicalOrdersTable)
+    .where(eq(medicalOrdersTable.consultationId, idNum))
+    .orderBy(medicalOrdersTable.orderedAt);
+  res.json(orders);
+});
+
+router.post("/consultations/:id/orders", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
+  if (session.role !== "doctor") {
+    res.status(403).json({ error: "Only doctors can create medical orders" });
+    return;
+  }
+
+  const idNum = parseInt(req.params.id);
+  if (isNaN(idNum)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [consultation] = await db
+    .select()
+    .from(consultationsTable)
+    .where(eq(consultationsTable.id, idNum));
+  if (!consultation) { res.status(404).json({ error: "Consultation not found" }); return; }
+
+  const { type, name, priority, notes } = req.body as {
+    type: string; name: string; priority?: string; notes?: string;
+  };
+  if (!type || !name) {
+    res.status(400).json({ error: "type and name are required" });
+    return;
+  }
+
+  const [order] = await db.insert(medicalOrdersTable).values({
+    consultationId: idNum,
+    patientId: consultation.patientId,
+    doctorId: consultation.doctorId,
+    type,
+    name,
+    priority: priority ?? "routine",
+    notes: notes ?? null,
+    status: "ordered",
+  }).returning();
+
+  res.status(201).json(order);
 });
 
 export default router;

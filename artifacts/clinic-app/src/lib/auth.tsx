@@ -8,6 +8,8 @@ export interface AuthUser {
   role: "doctor" | "patient" | "pharmacy";
   title: string | null;
   specialization: string | null;
+  doctorDbId: number | null;
+  patientDbId: number | null;
 }
 
 type AuthContextType = {

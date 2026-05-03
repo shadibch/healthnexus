@@ -14,6 +14,7 @@ import ConsultationsPage from "@/pages/consultations";
 import PrescriptionsPage from "@/pages/prescriptions";
 import StockPage from "@/pages/stock";
 import AppointmentsPage from "@/pages/appointments";
+import EncounterPage from "@/pages/encounter";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -50,6 +51,7 @@ function AppRoutes() {
           <Route path="/" component={DashboardPage} />
           <Route path="/patients" component={PatientsPage} />
           <Route path="/queue" component={QueuePage} />
+          <Route path="/encounter/:appointmentId" component={EncounterPage} />
           <Route path="/consultations" component={ConsultationsPage} />
           <Route path="/prescriptions" component={PrescriptionsPage} />
           <Route path="/stock" component={StockPage} />
