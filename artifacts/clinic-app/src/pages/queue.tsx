@@ -76,7 +76,8 @@ export default function QueuePage() {
   const QueueCard = ({ item }: { item: QueueItem }) => {
     const config = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.scheduled;
     const canAdvance = isDoctor && ["scheduled", "confirmed", "in_progress"].includes(item.status);
-    const canOpenEncounter = isDoctor && ["confirmed", "in_progress"].includes(item.status);
+    // Allow opening encounter for ANY active appointment (scheduled/confirmed/in_progress)
+    const canOpenEncounter = isDoctor && ["scheduled", "confirmed", "in_progress"].includes(item.status);
     const time = new Date(item.scheduledAt).toLocaleTimeString(isRTL ? "ar-AE" : "en-AE", {
       hour: "2-digit", minute: "2-digit",
     });
@@ -120,12 +121,12 @@ export default function QueuePage() {
 
             {/* Action buttons */}
             <div className={cn("flex items-center gap-2 shrink-0", isRTL && "flex-row-reverse")}>
-              {/* Open Encounter button — only for doctor on confirmed/in-progress */}
+              {/* Open Encounter button — available for any active appointment */}
               {canOpenEncounter && (
                 <Button
                   size="sm"
                   onClick={() => navigate(`/encounter/${item.appointmentId}`)}
-                  className="gap-1 text-xs bg-primary"
+                  className="gap-1 text-xs bg-primary hover:bg-primary/90"
                 >
                   <Stethoscope className="w-3.5 h-3.5" />
                   {isRTL ? "فتح السجل" : "Open Encounter"}

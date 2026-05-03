@@ -10,6 +10,9 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth, getSessionUser } from "../lib/session";
 
+// Server-side schema: omit doctorId — always set from session, never from body
+const CreateConsultationServerBody = CreateConsultationBody.omit({ doctorId: true });
+
 const router: IRouter = Router();
 
 async function getMaps() {
@@ -42,6 +45,13 @@ router.get("/consultations", requireAuth, async (req, res): Promise<void> => {
   if (patientId) all = all.filter((c) => c.patientId === patientId);
   if (doctorId) all = all.filter((c) => c.doctorId === doctorId);
 
+  // Support direct appointmentId filter (for encounter page lookup)
+  const appointmentIdRaw = req.query.appointmentId;
+  if (appointmentIdRaw) {
+    const appointmentId = parseInt(String(appointmentIdRaw));
+    if (!isNaN(appointmentId)) all = all.filter((c) => c.appointmentId === appointmentId);
+  }
+
   const sliced = all.slice(0, limit);
   res.json(
     sliced.map((c) => ({
@@ -60,13 +70,44 @@ router.post("/consultations", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const parsed = CreateConsultationBody.safeParse(req.body);
+  const parsed = CreateConsultationServerBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
 
-  const { patientId, doctorId } = parsed.data as any;
+  const data = parsed.data as any;
+  // Always derive doctorId from session — never trust the body for security
+  const doctorId = session.doctorDbId!;
+  const patientId = data.patientId;
+  const appointmentId = data.appointmentId;
+
+  // Prevent duplicate encounter for the same appointment
+  if (appointmentId) {
+    const existing = await db
+      .select()
+      .from(consultationsTable)
+      .where(eq(consultationsTable.appointmentId, appointmentId))
+      .limit(1);
+    if (existing.length > 0) {
+      // Return existing encounter instead of creating a duplicate
+      const { patientMap, doctorMap } = await getMaps();
+      const enc = existing[0];
+      const orders = await db
+        .select()
+        .from(medicalOrdersTable)
+        .where(eq(medicalOrdersTable.consultationId, enc.id))
+        .orderBy(medicalOrdersTable.orderedAt);
+      res.status(200).json({
+        ...enc,
+        patientName: patientMap.get(enc.patientId) ?? null,
+        doctorName: doctorMap.get(enc.doctorId) ?? null,
+        isFollowUp: enc.encounterType === "follow_up",
+        orders,
+      });
+      return;
+    }
+  }
 
   // 7-day follow-up detection: find the patient's most recent consultation
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -76,7 +117,6 @@ router.post("/consultations", requireAuth, async (req, res): Promise<void> => {
     .where(
       and(
         eq(consultationsTable.patientId, patientId),
-        // created within the last 7 days
         lt(sevenDaysAgo, consultationsTable.createdAt)
       )
     )
@@ -84,7 +124,7 @@ router.post("/consultations", requireAuth, async (req, res): Promise<void> => {
     .limit(1);
 
   let parentConsultationId: number | null = null;
-  let encounterType = (parsed.data as any).encounterType ?? "initial";
+  let encounterType = data.encounterType ?? "initial";
 
   if (recentConsultations.length > 0) {
     parentConsultationId = recentConsultations[0].id;
@@ -93,7 +133,7 @@ router.post("/consultations", requireAuth, async (req, res): Promise<void> => {
 
   const [consultation] = await db
     .insert(consultationsTable)
-    .values({ ...parsed.data, parentConsultationId, encounterType })
+    .values({ ...data, doctorId, parentConsultationId, encounterType })
     .returning();
 
   const { patientMap, doctorMap } = await getMaps();
