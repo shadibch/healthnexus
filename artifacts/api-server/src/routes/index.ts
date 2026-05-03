@@ -11,6 +11,7 @@ import medicationsRouter from "./medications";
 import stockRouter from "./stock";
 import dashboardRouter from "./dashboard";
 import ordersRouter from "./orders";
+import activitiesRouter from "./activities";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(medicationsRouter);
 router.use(stockRouter);
 router.use(dashboardRouter);
 router.use(ordersRouter);
+router.use(activitiesRouter);
 
 export default router;

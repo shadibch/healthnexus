@@ -19,11 +19,12 @@ A full-stack clinic management platform targeting Middle East & Africa markets. 
 - **Theme**: Emerald/teal healthcare theme, light + dark mode
 
 ## Database Schema
-Tables: `patients`, `doctors`, `appointments`, `consultations`, `prescriptions`, `prescription_items`, `medications`, `stock`, `medical_orders`
+Tables: `patients`, `doctors`, `appointments`, `consultations`, `prescriptions`, `prescription_items`, `medications`, `stock`, `medical_orders`, `encounter_activities`
 
 ### Key Schema Details
 - `consultations`: includes `parentConsultationId` (for follow-up linking) and `encounterType` (initial | follow_up | emergency)
 - `medical_orders`: type (lab|xray|ct|mri|ultrasound|ecg|other), priority (stat|urgent|routine), status (ordered|in_progress|completed|cancelled), resultData, resultNotes
+- `encounter_activities`: HAAD/CPT coded activities per encounter — activityCode, description, category, quantity, unitPrice (AED), total
 
 ## Authentication & Role Isolation
 Session-based auth via `express-session` + `SESSION_SECRET` env var.
@@ -79,6 +80,15 @@ Session-based auth via `express-session` + `SESSION_SECRET` env var.
 - `PATCH /orders/:id` — update order (add result data, change status)
 - `DELETE /orders/:id` — cancel order (sets status=cancelled)
 
+### HAAD / CPT Activities
+- `GET /activities/catalogue` — searchable HAAD/CPT code library (100+ codes, filters by category + keyword)
+- `GET /consultations/:id/activities` — list activities for an encounter
+- `POST /consultations/:id/activities` — add coded activity (doctor only)
+- `PATCH /activities/:id` — update quantity
+- `DELETE /activities/:id` — remove activity
+
+Activity catalogue covers 6 categories: `consultation` (E&M codes 99201–99245), `procedure` (ECG, spirometry, IV, wound repair…), `laboratory` (CBC, CMP, HbA1c, lipids, cultures, tumour markers…), `radiology` (X-ray, CT, MRI, ultrasound, duplex…), `nursing`, `physiotherapy`. Prices in AED per HAAD fee schedule.
+
 ### Prescriptions
 - `GET/POST /prescriptions` — list + create (with items)
 - `GET/PATCH /prescriptions/:id` — includes dispense workflow
@@ -98,6 +108,7 @@ Session-based auth via `express-session` + `SESSION_SECRET` env var.
 - `/encounter/:appointmentId` — **Full encounter workflow page** (doctor only)
   - Vitals, chief complaint, diagnosis, treatment plan, follow-up date
   - Medical orders section (add lab/xray/ct/mri/ultrasound/ecg; enter results)
+  - **HAAD/CPT Activities panel** — searchable coded activity catalogue, quantity control, AED pricing, running total claim
   - Patient history panel (last 3 encounters with orders)
   - Create / save / complete encounter
   - 7-day follow-up auto-detection shown as badge

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
+import ActivitiesPanel from "@/components/ActivitiesPanel";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -695,6 +696,9 @@ export default function EncounterPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* HAAD / CPT Activity Codes & Billing */}
+              <ActivitiesPanel consultationId={activeEncounterId} isCompleted={isCompleted} />
 
               {/* Action buttons */}
               {!isCompleted && (
