@@ -1,27 +1,52 @@
 import { Router, type IRouter } from "express";
-import { eq, desc } from "drizzle-orm";
-import { db, encounterActivitiesTable, consultationsTable } from "@workspace/db";
+import { eq, ilike, and, or, sql } from "drizzle-orm";
+import { db, encounterActivitiesTable, consultationsTable, haadActivityCatalogueTable } from "@workspace/db";
 import { requireAuth, getSessionUser } from "../lib/session";
-import { HAAD_ACTIVITY_CODES } from "../data/haad-activity-codes";
 
 const router: IRouter = Router();
 
-// ── Search HAAD activity codes catalogue ──────────────────────────────────────
-router.get("/activities/catalogue", requireAuth, (req, res) => {
-  const q = (req.query.q as string | undefined)?.toLowerCase().trim();
+// ── Search HAAD activity codes catalogue (DB-backed autocomplete) ─────────────
+router.get("/activities/catalogue", requireAuth, async (req, res): Promise<void> => {
+  const q = (req.query.q as string | undefined)?.trim();
   const category = req.query.category as string | undefined;
 
-  let results = HAAD_ACTIVITY_CODES;
-  if (category) results = results.filter((c) => c.category === category);
+  const conditions = [];
+
+  if (category) {
+    conditions.push(eq(haadActivityCatalogueTable.category, category));
+  }
+
   if (q) {
-    results = results.filter(
-      (c) =>
-        c.code.toLowerCase().includes(q) ||
-        c.description.toLowerCase().includes(q) ||
-        c.descriptionAr.includes(q)
+    conditions.push(
+      or(
+        ilike(haadActivityCatalogueTable.code, `%${q}%`),
+        ilike(haadActivityCatalogueTable.description, `%${q}%`),
+        ilike(haadActivityCatalogueTable.descriptionAr, `%${q}%`)
+      )
     );
   }
-  res.json(results.slice(0, 40));
+
+  const rows = await db
+    .select({
+      id: haadActivityCatalogueTable.id,
+      code: haadActivityCatalogueTable.code,
+      description: haadActivityCatalogueTable.description,
+      descriptionAr: haadActivityCatalogueTable.descriptionAr,
+      category: haadActivityCatalogueTable.category,
+      unitPrice: haadActivityCatalogueTable.unitPrice,
+    })
+    .from(haadActivityCatalogueTable)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(haadActivityCatalogueTable.category, haadActivityCatalogueTable.code)
+    .limit(50);
+
+  // Return unitPrice as a number for frontend compatibility
+  res.json(
+    rows.map((r) => ({
+      ...r,
+      unitPrice: parseFloat(r.unitPrice ?? "0"),
+    }))
+  );
 });
 
 // ── List activities for an encounter ─────────────────────────────────────────
@@ -29,7 +54,6 @@ router.get("/consultations/:id/activities", requireAuth, async (req, res): Promi
   const session = getSessionUser(req)!;
   const consultationId = parseInt(req.params.id);
 
-  // Verify access
   const [consultation] = await db
     .select()
     .from(consultationsTable)
