@@ -5,7 +5,7 @@ export interface AuthUser {
   id: string;
   name: string;
   email: string;
-  role: "doctor" | "patient" | "pharmacy";
+  role: "doctor" | "patient" | "pharmacy" | "receptionist";
   title: string | null;
   specialization: string | null;
   doctorDbId: number | null;

@@ -19,15 +19,17 @@ import {
 import { Button } from "@/components/ui/button";
 
 const ROLE_DOT: Record<Role, string> = {
-  doctor:   "bg-emerald-500",
-  patient:  "bg-blue-500",
-  pharmacy: "bg-purple-500",
+  doctor:       "bg-emerald-500",
+  patient:      "bg-blue-500",
+  pharmacy:     "bg-purple-500",
+  receptionist: "bg-orange-500",
 };
 
 const ROLE_BADGE: Record<Role, string> = {
-  doctor:   "bg-emerald-100 text-emerald-800",
-  patient:  "bg-blue-100 text-blue-800",
-  pharmacy: "bg-purple-100 text-purple-800",
+  doctor:       "bg-emerald-100 text-emerald-800",
+  patient:      "bg-blue-100 text-blue-800",
+  pharmacy:     "bg-purple-100 text-purple-800",
+  receptionist: "bg-orange-100 text-orange-800",
 };
 
 function NavBadge({ count, variant = "red" }: { count: number; variant?: "red" | "amber" }) {
@@ -50,12 +52,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const badges = useNavBadges();
 
   const ROLE_LABELS: Record<Role, string> = {
-    doctor:   t("doctorView"),
-    patient:  t("patientView"),
-    pharmacy: t("pharmacyView"),
+    doctor:       t("doctorView"),
+    patient:      t("patientView"),
+    pharmacy:     t("pharmacyView"),
+    receptionist: t("receptionView"),
   };
 
   function navItems(r: Role) {
+    if (r === "receptionist") {
+      return [
+        { href: "/",             label: t("dashboard"),       icon: LayoutDashboard, badge: 0,            badgeVariant: "red"   as const },
+        { href: "/patients",     label: t("patients"),        icon: Users,           badge: 0,            badgeVariant: "red"   as const },
+        { href: "/appointments", label: t("appointments"),    icon: CalendarClock,   badge: badges.queue, badgeVariant: "amber" as const },
+        { href: "/queue",        label: t("todaysQueue"),     icon: FileText,        badge: badges.queue, badgeVariant: "amber" as const },
+      ];
+    }
     if (r === "doctor") {
       return [
         { href: "/",              label: t("dashboard"),    icon: LayoutDashboard, badge: 0,              badgeVariant: "red"   as const },

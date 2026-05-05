@@ -42,6 +42,17 @@ const DEMO_ACCOUNTS = [
     color: "bg-purple-50 border-purple-200 hover:bg-purple-100",
     dot: "bg-purple-500",
   },
+  {
+    role: "receptionist" as const,
+    email: "reception@clinicflow.ae",
+    password: "reception123",
+    name: "Sara Al-Mansouri",
+    nameAr: "سارة المنصوري",
+    title: "Head Receptionist",
+    titleAr: "رئيسة الاستقبال",
+    color: "bg-orange-50 border-orange-200 hover:bg-orange-100",
+    dot: "bg-orange-500",
+  },
 ];
 
 export default function LoginPage() {

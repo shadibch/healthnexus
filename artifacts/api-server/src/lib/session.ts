@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 
 export interface SessionUser {
   userId: string;
-  role: "doctor" | "patient" | "pharmacy";
+  role: "doctor" | "patient" | "pharmacy" | "receptionist";
   name: string;
   email: string;
   doctorDbId: number | null;
@@ -31,7 +31,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   next();
 }
 
-export function requireRole(...roles: Array<"doctor" | "patient" | "pharmacy">) {
+export function requireRole(...roles: Array<"doctor" | "patient" | "pharmacy" | "receptionist">) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const user = getSessionUser(req);
     if (!user) {

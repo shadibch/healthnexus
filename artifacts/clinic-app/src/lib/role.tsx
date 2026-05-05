@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 
-export type Role = "doctor" | "patient" | "pharmacy";
+export type Role = "doctor" | "patient" | "pharmacy" | "receptionist";
 
 const RoleContext = createContext<{
   role: Role;

@@ -145,6 +145,23 @@ export const translations = {
     // Appointments page
     noAppointments: "No appointments found",
 
+    // Receptionist
+    receptionView: "Reception",
+    receptionDashboard: "Reception Dashboard",
+    todayOverview: "Today's Overview",
+    checkIn: "Check In",
+    noShow: "No Show",
+    bookForPatient: "Book for Patient",
+    selectPatient: "Select Patient",
+    searchPatientName: "Search by name or ID...",
+    patientNotFound: "No patient found",
+    upcomingToday: "Upcoming Today",
+    checkedIn: "Checked In",
+    newPatientsToday: "New Today",
+    walkIns: "Walk-ins",
+    receptionActions: "Quick Actions",
+    allAppointmentsToday: "All Appointments Today",
+
     // General
     all: "All",
     error: "Error",
@@ -294,6 +311,23 @@ export const translations = {
 
     // Appointments page
     noAppointments: "لم يتم العثور على مواعيد",
+
+    // Receptionist
+    receptionView: "الاستقبال",
+    receptionDashboard: "لوحة الاستقبال",
+    todayOverview: "نظرة عامة على اليوم",
+    checkIn: "تسجيل الحضور",
+    noShow: "غياب",
+    bookForPatient: "حجز للمريض",
+    selectPatient: "اختر المريض",
+    searchPatientName: "ابحث بالاسم أو الرقم الوطني...",
+    patientNotFound: "لم يتم العثور على مريض",
+    upcomingToday: "القادمة اليوم",
+    checkedIn: "سُجّل حضورهم",
+    newPatientsToday: "جدد اليوم",
+    walkIns: "بدون موعد",
+    receptionActions: "إجراءات سريعة",
+    allAppointmentsToday: "جميع مواعيد اليوم",
 
     // General
     all: "الكل",

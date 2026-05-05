@@ -4,7 +4,7 @@ import type { Request } from "express";
 declare module "express-session" {
   interface SessionData {
     userId: string;
-    role: "doctor" | "patient" | "pharmacy";
+    role: "doctor" | "patient" | "pharmacy" | "receptionist";
     name: string;
     email: string;
     doctorDbId: number | null;
@@ -18,7 +18,7 @@ const DEMO_USERS: Record<string, {
   name: string;
   email: string;
   password: string;
-  role: "doctor" | "patient" | "pharmacy";
+  role: "doctor" | "patient" | "pharmacy" | "receptionist";
   title?: string;
   specialization?: string;
   doctorDbId: number | null;
@@ -51,6 +51,16 @@ const DEMO_USERS: Record<string, {
     password: "pharmacy123",
     role: "pharmacy",
     title: "Head Pharmacist",
+    doctorDbId: null,
+    patientDbId: null,
+  },
+  "reception@clinicflow.ae": {
+    id: "demo-receptionist-1",
+    name: "Sara Al-Mansouri",
+    email: "reception@clinicflow.ae",
+    password: "reception123",
+    role: "receptionist",
+    title: "Head Receptionist",
     doctorDbId: null,
     patientDbId: null,
   },

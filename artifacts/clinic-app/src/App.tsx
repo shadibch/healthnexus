@@ -8,6 +8,7 @@ import { I18nProvider } from "@/lib/i18n";
 import Layout from "@/components/Layout";
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
+import ReceptionPage from "@/pages/reception";
 import PatientsPage from "@/pages/patients";
 import QueuePage from "@/pages/queue";
 import ConsultationsPage from "@/pages/consultations";
@@ -48,7 +49,7 @@ function AppRoutes() {
     <RoleProvider initialRole={user.role}>
       <Layout>
         <Switch>
-          <Route path="/" component={DashboardPage} />
+          <Route path="/">{user.role === "receptionist" ? <ReceptionPage /> : <DashboardPage />}</Route>
           <Route path="/patients" component={PatientsPage} />
           <Route path="/queue" component={QueuePage} />
           <Route path="/encounter/:appointmentId" component={EncounterPage} />
