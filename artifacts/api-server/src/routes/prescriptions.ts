@@ -69,6 +69,12 @@ router.get("/prescriptions", requireAuth, async (req, res): Promise<void> => {
   if (patientId && session.role !== "patient") all = all.filter((p) => p.patientId === patientId);
   if (doctorId && session.role !== "doctor") all = all.filter((p) => p.doctorId === doctorId);
   if (status) all = all.filter((p) => p.status === status);
+  // consultationId filter (not in generated schema — parsed directly)
+  const consultationIdRaw = req.query["consultationId"];
+  if (consultationIdRaw) {
+    const cid = parseInt(consultationIdRaw as string);
+    if (!isNaN(cid)) all = all.filter((p) => p.consultationId === cid);
+  }
 
   const sliced = all.slice(0, limit);
   const enriched = await Promise.all(sliced.map((p) => enrichPrescription(p, patientMap, doctorMap)));

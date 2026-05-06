@@ -43,7 +43,10 @@ import {
   X,
   Loader2,
   CornerDownRight,
+  Pill,
+  Trash2,
 } from "lucide-react";
+import MedicationAutocomplete, { type MedicationOption } from "@/components/MedicationAutocomplete";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -70,6 +73,34 @@ const STATUS_CFG: Record<string, { label: string; icon: React.ReactNode; color: 
   completed:   { label: "Completed",   icon: <CheckCircle2 className="w-3 h-3" />, color: "text-emerald-700 bg-emerald-50" },
   cancelled:   { label: "Cancelled",   icon: <X className="w-3 h-3" />,            color: "text-gray-500 bg-gray-50" },
 };
+
+interface RxItem {
+  medication: MedicationOption;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  quantity: number;
+  instructions: string;
+}
+
+interface PrescriptionItem {
+  id: number;
+  medicationId: number;
+  medicationName: string | null;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  quantity: number;
+  instructions: string | null;
+}
+
+interface IssuedPrescription {
+  id: number;
+  consultationId: number | null;
+  status: string;
+  issuedAt: string;
+  items: PrescriptionItem[];
+}
 
 interface MedicalOrder {
   id: number;
@@ -299,6 +330,15 @@ export default function EncounterPage() {
   const [notes, setNotes] = useState("");
   const [followUpDate, setFollowUpDate] = useState("");
 
+  // Prescription builder state
+  const [rxItems, setRxItems] = useState<RxItem[]>([]);
+  const [rxMed, setRxMed] = useState<MedicationOption | null>(null);
+  const [rxDosage, setRxDosage] = useState("");
+  const [rxFrequency, setRxFrequency] = useState("");
+  const [rxDuration, setRxDuration] = useState("");
+  const [rxQuantity, setRxQuantity] = useState(1);
+  const [rxInstructions, setRxInstructions] = useState("");
+
   // ── Fetch appointment ──────────────────────────────────────────────────────
   const { data: appointment, isLoading: loadingAppt } = useQuery<Appointment>({
     queryKey: ["appointment", apptId],
@@ -420,6 +460,63 @@ export default function EncounterPage() {
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
+  // ── Existing prescriptions for this encounter ──────────────────────────────
+  const { data: issuedPrescriptions, refetch: refetchPrescriptions } = useQuery<IssuedPrescription[]>({
+    queryKey: ["encounter-prescriptions", activeEncounterId],
+    queryFn: () => apiFetch(`/prescriptions?consultationId=${activeEncounterId}`),
+    enabled: activeEncounterId != null,
+  });
+
+  // ── Issue prescription mutation ────────────────────────────────────────────
+  const issuePrescriptionMutation = useMutation({
+    mutationFn: () =>
+      apiFetch("/prescriptions", {
+        method: "POST",
+        body: JSON.stringify({
+          consultationId: activeEncounterId,
+          patientId: appointment!.patientId,
+          doctorId: user?.doctorDbId ?? appointment?.doctorId,
+          items: rxItems.map((item) => ({
+            medicationId: item.medication.id,
+            dosage: item.dosage,
+            frequency: item.frequency,
+            duration: item.duration,
+            quantity: item.quantity,
+            instructions: item.instructions || null,
+          })),
+        }),
+      }),
+    onSuccess: () => {
+      setRxItems([]);
+      setRxMed(null);
+      setRxDosage("");
+      setRxFrequency("");
+      setRxDuration("");
+      setRxQuantity(1);
+      setRxInstructions("");
+      refetchPrescriptions();
+      qc.invalidateQueries({ queryKey: ["prescriptions"] });
+      toast({ title: lang === "ar" ? "تم إصدار الوصفة الطبية" : "Prescription issued successfully" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const addRxItem = () => {
+    if (!rxMed || !rxDosage || !rxFrequency || !rxDuration) return;
+    setRxItems((prev) => [
+      ...prev,
+      { medication: rxMed, dosage: rxDosage, frequency: rxFrequency, duration: rxDuration, quantity: rxQuantity, instructions: rxInstructions },
+    ]);
+    setRxMed(null);
+    setRxDosage("");
+    setRxFrequency("");
+    setRxDuration("");
+    setRxQuantity(1);
+    setRxInstructions("");
+  };
+
+  const removeRxItem = (index: number) => setRxItems((prev) => prev.filter((_, i) => i !== index));
 
   // ── Loading state ─────────────────────────────────────────────────────────
   if (loadingAppt) {
@@ -607,7 +704,7 @@ export default function EncounterPage() {
                   <div>
                     <Label className="text-xs font-medium text-muted-foreground">{lang === "ar" ? "خطة العلاج" : "Treatment Plan"}</Label>
                     <Textarea className="mt-1" rows={3} value={treatmentPlan} onChange={(e) => setTreatmentPlan(e.target.value)}
-                      placeholder={lang === "ar" ? "الأدوية، الإجراءات، التحويل، التعليمات..." : "Medications, procedures, referrals, instructions..."} disabled={isCompleted} />
+                      placeholder={lang === "ar" ? "الإجراءات، التحويل، التعليمات..." : "Procedures, referrals, instructions..."} disabled={isCompleted} />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -621,6 +718,221 @@ export default function EncounterPage() {
                         disabled={isCompleted} dir="ltr" />
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Prescription Builder */}
+              <Card>
+                <CardHeader className="py-3 px-4">
+                  <div className={cn("flex items-center justify-between", isRTL && "flex-row-reverse")}>
+                    <CardTitle className={cn("text-sm font-semibold flex items-center gap-2", isRTL && "flex-row-reverse")}>
+                      <Pill className="w-4 h-4 text-emerald-600" />
+                      {lang === "ar" ? "الوصفة الطبية" : "Prescription"}
+                      {(issuedPrescriptions?.length ?? 0) > 0 && (
+                        <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-700">
+                          {lang === "ar" ? `${issuedPrescriptions!.length} صادرة` : `${issuedPrescriptions!.length} issued`}
+                        </Badge>
+                      )}
+                    </CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="px-4 pb-4 space-y-4">
+
+                  {/* Already-issued prescriptions (read-only) */}
+                  {issuedPrescriptions && issuedPrescriptions.length > 0 && (
+                    <div className="space-y-3">
+                      {issuedPrescriptions.map((rx) => (
+                        <div key={rx.id} className="border border-emerald-200 rounded-lg bg-emerald-50/40">
+                          <div className={cn("flex items-center justify-between px-3 py-2 border-b border-emerald-100", isRTL && "flex-row-reverse")}>
+                            <span className="text-xs font-semibold text-emerald-800">
+                              {lang === "ar" ? "وصفة" : "Prescription"} #{rx.id}
+                            </span>
+                            <Badge className="text-xs bg-emerald-100 text-emerald-700 border-emerald-300 capitalize">
+                              {rx.status}
+                            </Badge>
+                          </div>
+                          <div className="px-3 py-2 space-y-1.5">
+                            {rx.items.map((item) => (
+                              <div key={item.id} className={cn("flex items-start gap-2 text-xs", isRTL && "flex-row-reverse")}>
+                                <Pill className="w-3.5 h-3.5 text-emerald-600 mt-0.5 shrink-0" />
+                                <div className={cn("flex-1", isRTL && "text-right")}>
+                                  <span className="font-semibold">{item.medicationName}</span>
+                                  <span className="text-muted-foreground ml-1.5">
+                                    {item.dosage} · {item.frequency} · {item.duration} · qty {item.quantity}
+                                  </span>
+                                  {item.instructions && (
+                                    <p className="text-muted-foreground italic mt-0.5">{item.instructions}</p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Builder — only shown when encounter is open */}
+                  {!isCompleted && (
+                    <>
+                      {/* Medication autocomplete row */}
+                      <div className="space-y-2">
+                        <Label className="text-xs font-medium text-muted-foreground">
+                          {lang === "ar" ? "اختر الدواء (الاسم العلمي)" : "Select medication (generic name)"}
+                        </Label>
+                        <MedicationAutocomplete
+                          value={rxMed}
+                          onSelect={setRxMed}
+                          lang={lang}
+                          isRTL={isRTL}
+                        />
+                      </div>
+
+                      {/* Dosage / frequency / duration / qty */}
+                      {rxMed && (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-xs font-medium text-muted-foreground">{lang === "ar" ? "الجرعة" : "Dosage"}</Label>
+                              <Input
+                                className="mt-1 h-8 text-sm"
+                                value={rxDosage}
+                                onChange={(e) => setRxDosage(e.target.value)}
+                                placeholder={lang === "ar" ? "مثال: حبة واحدة" : "e.g. 1 tablet"}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs font-medium text-muted-foreground">{lang === "ar" ? "التكرار" : "Frequency"}</Label>
+                              <select
+                                className="mt-1 h-8 w-full rounded-md border border-border bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                value={rxFrequency}
+                                onChange={(e) => setRxFrequency(e.target.value)}
+                              >
+                                <option value="">{lang === "ar" ? "اختر..." : "Select..."}</option>
+                                <option value="Once daily">{lang === "ar" ? "مرة يومياً" : "Once daily"}</option>
+                                <option value="Twice daily">{lang === "ar" ? "مرتان يومياً" : "Twice daily"}</option>
+                                <option value="Three times daily">{lang === "ar" ? "ثلاث مرات يومياً" : "Three times daily"}</option>
+                                <option value="Four times daily">{lang === "ar" ? "أربع مرات يومياً" : "Four times daily"}</option>
+                                <option value="Every 8 hours">{lang === "ar" ? "كل 8 ساعات" : "Every 8 hours"}</option>
+                                <option value="Every 12 hours">{lang === "ar" ? "كل 12 ساعة" : "Every 12 hours"}</option>
+                                <option value="At bedtime">{lang === "ar" ? "عند النوم" : "At bedtime"}</option>
+                                <option value="As needed">{lang === "ar" ? "عند الحاجة" : "As needed"}</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-xs font-medium text-muted-foreground">{lang === "ar" ? "المدة" : "Duration"}</Label>
+                              <select
+                                className="mt-1 h-8 w-full rounded-md border border-border bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                value={rxDuration}
+                                onChange={(e) => setRxDuration(e.target.value)}
+                              >
+                                <option value="">{lang === "ar" ? "اختر..." : "Select..."}</option>
+                                <option value="3 days">{lang === "ar" ? "3 أيام" : "3 days"}</option>
+                                <option value="5 days">{lang === "ar" ? "5 أيام" : "5 days"}</option>
+                                <option value="7 days">{lang === "ar" ? "7 أيام" : "7 days"}</option>
+                                <option value="10 days">{lang === "ar" ? "10 أيام" : "10 days"}</option>
+                                <option value="14 days">{lang === "ar" ? "14 يوم" : "14 days"}</option>
+                                <option value="1 month">{lang === "ar" ? "شهر واحد" : "1 month"}</option>
+                                <option value="2 months">{lang === "ar" ? "شهران" : "2 months"}</option>
+                                <option value="3 months">{lang === "ar" ? "3 أشهر" : "3 months"}</option>
+                                <option value="Ongoing">{lang === "ar" ? "مستمر" : "Ongoing"}</option>
+                              </select>
+                            </div>
+                            <div>
+                              <Label className="text-xs font-medium text-muted-foreground">{lang === "ar" ? "الكمية" : "Quantity"}</Label>
+                              <Input
+                                className="mt-1 h-8 text-sm"
+                                type="number"
+                                min={1}
+                                value={rxQuantity}
+                                onChange={(e) => setRxQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                                dir="ltr"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <Label className="text-xs font-medium text-muted-foreground">{lang === "ar" ? "تعليمات (اختياري)" : "Instructions (optional)"}</Label>
+                            <Input
+                              className="mt-1 h-8 text-sm"
+                              value={rxInstructions}
+                              onChange={(e) => setRxInstructions(e.target.value)}
+                              placeholder={lang === "ar" ? "مثال: يؤخذ مع الطعام" : "e.g. Take with food"}
+                            />
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={addRxItem}
+                            disabled={!rxMed || !rxDosage || !rxFrequency || !rxDuration}
+                            className="gap-1.5 text-xs w-full border-dashed border-emerald-400 text-emerald-700 hover:bg-emerald-50"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            {lang === "ar" ? "إضافة الدواء للقائمة" : "Add to prescription list"}
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Pending items list */}
+                      {rxItems.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="h-px bg-border" />
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                            {lang === "ar" ? "الأدوية المضافة" : "Added medications"}
+                          </p>
+                          <div className="space-y-2">
+                            {rxItems.map((item, idx) => (
+                              <div
+                                key={idx}
+                                className={cn(
+                                  "flex items-start gap-2 p-2.5 rounded-lg border border-border bg-muted/20 text-xs",
+                                  isRTL && "flex-row-reverse"
+                                )}
+                              >
+                                <Pill className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+                                <div className={cn("flex-1 min-w-0", isRTL && "text-right")}>
+                                  <p className="font-semibold">{item.medication.genericName ?? item.medication.name}</p>
+                                  <p className="text-muted-foreground">
+                                    {item.dosage} · {item.frequency} · {item.duration} · qty {item.quantity}
+                                  </p>
+                                  {item.instructions && (
+                                    <p className="text-muted-foreground italic">{item.instructions}</p>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeRxItem(idx)}
+                                  className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          <Button
+                            className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700"
+                            size="sm"
+                            onClick={() => issuePrescriptionMutation.mutate()}
+                            disabled={issuePrescriptionMutation.isPending || rxItems.length === 0}
+                          >
+                            {issuePrescriptionMutation.isPending
+                              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />{lang === "ar" ? "جارٍ الإصدار..." : "Issuing..."}</>
+                              : <><CheckCircle2 className="w-3.5 h-3.5" />{lang === "ar" ? `إصدار الوصفة (${rxItems.length} دواء)` : `Issue Prescription (${rxItems.length} item${rxItems.length > 1 ? "s" : ""})`}</>
+                            }
+                          </Button>
+                        </div>
+                      )}
+
+                      {rxItems.length === 0 && !rxMed && (
+                        <p className="text-xs text-muted-foreground text-center py-4 border border-dashed border-border rounded-lg">
+                          {lang === "ar"
+                            ? "ابحث عن الدواء بالاسم العلمي أعلاه لإضافته للوصفة"
+                            : "Search for a medication by generic name above to add it to the prescription"}
+                        </p>
+                      )}
+                    </>
+                  )}
                 </CardContent>
               </Card>
 
