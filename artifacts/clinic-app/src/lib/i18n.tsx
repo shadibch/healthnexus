@@ -19,6 +19,7 @@ export const translations = {
     myPrescriptions: "My Prescriptions",
     pendingRx: "Pending Rx",
     stock: "Stock",
+    billing: "Billing",
     logout: "Logout",
 
     // Auth
@@ -186,6 +187,7 @@ export const translations = {
     myPrescriptions: "وصفاتي الطبية",
     pendingRx: "وصفات معلقة",
     stock: "المخزون",
+    billing: "الفوترة",
     logout: "تسجيل الخروج",
 
     // Auth

@@ -47,6 +47,7 @@ import {
   Trash2,
 } from "lucide-react";
 import MedicationAutocomplete, { type MedicationOption } from "@/components/MedicationAutocomplete";
+import PaymentPanel from "@/components/PaymentPanel";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -1011,6 +1012,25 @@ export default function EncounterPage() {
 
               {/* HAAD / CPT Activity Codes & Billing */}
               <ActivitiesPanel consultationId={activeEncounterId} isCompleted={isCompleted} />
+
+              {/* Payment & Billing Panel */}
+              {encounter && (
+                <PaymentPanel
+                  consultationId={encounter.id}
+                  current={{
+                    paymentStatus: (encounter as any).paymentStatus ?? "unpaid",
+                    paymentMethod: (encounter as any).paymentMethod ?? null,
+                    paidAmount: (encounter as any).paidAmount ?? null,
+                    insuranceCompany: (encounter as any).insuranceCompany ?? null,
+                    insuranceAmount: (encounter as any).insuranceAmount ?? null,
+                  }}
+                  activityTotal={0}
+                  lang={lang}
+                  isRTL={isRTL}
+                  canEdit={user?.role === "receptionist" || user?.role === "doctor"}
+                  queryKey={["encounter", activeEncounterId]}
+                />
+              )}
 
               {/* Action buttons */}
               {!isCompleted && (

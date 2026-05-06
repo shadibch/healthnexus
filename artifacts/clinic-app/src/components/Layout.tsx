@@ -15,6 +15,7 @@ import {
   LogOut,
   Globe,
   User,
+  ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -65,6 +66,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         { href: "/patients",     label: t("patients"),        icon: Users,           badge: 0,            badgeVariant: "red"   as const },
         { href: "/appointments", label: t("appointments"),    icon: CalendarClock,   badge: badges.queue, badgeVariant: "amber" as const },
         { href: "/queue",        label: t("todaysQueue"),     icon: FileText,        badge: badges.queue, badgeVariant: "amber" as const },
+        { href: "/billing",      label: t("billing"),         icon: ShieldCheck,     badge: 0,            badgeVariant: "red"   as const },
       ];
     }
     if (r === "doctor") {
@@ -74,6 +76,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         { href: "/queue",         label: t("todaysQueue"),  icon: CalendarClock,   badge: badges.queue,   badgeVariant: "amber" as const },
         { href: "/consultations", label: t("consultations"),icon: Stethoscope,     badge: 0,              badgeVariant: "red"   as const },
         { href: "/prescriptions", label: t("prescriptions"),icon: FileText,        badge: badges.prescriptions, badgeVariant: "amber" as const },
+        { href: "/billing",       label: t("billing"),      icon: ShieldCheck,     badge: 0,              badgeVariant: "red"   as const },
       ];
     }
     if (r === "patient") {

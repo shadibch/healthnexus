@@ -1,7 +1,7 @@
 # ClinicFlow — Hospital & Clinic Management Platform
 
 ## Overview
-A full-stack clinic management platform targeting Middle East & Africa markets. Bilingual-ready (Arabic/English with RTL), mobile-friendly, covering three roles: Doctor, Patient, and Pharmacy. All API routes require authentication. Each role sees only their own data (full isolation).
+A full-stack clinic management platform targeting Middle East & Africa markets. Bilingual-ready (Arabic/English with RTL), mobile-friendly, covering four roles: Doctor, Patient, Pharmacy, Receptionist. All API routes require authentication. Each role sees only their own data (full isolation).
 
 ## Architecture
 
@@ -22,7 +22,7 @@ A full-stack clinic management platform targeting Middle East & Africa markets. 
 Tables: `patients`, `doctors`, `appointments`, `consultations`, `prescriptions`, `prescription_items`, `medications`, `stock`, `medical_orders`, `encounter_activities`
 
 ### Key Schema Details
-- `consultations`: includes `parentConsultationId` (for follow-up linking) and `encounterType` (initial | follow_up | emergency)
+- `consultations`: includes `parentConsultationId` (for follow-up linking), `encounterType` (initial | follow_up | emergency), and payment fields: `paymentStatus` (unpaid|paid|exempted|partial), `paymentMethod` (cash|card), `paidAmount`, `insuranceCompany`, `insuranceAmount`
 - `medical_orders`: type (lab|xray|ct|mri|ultrasound|ecg|other), priority (stat|urgent|routine), status (ordered|in_progress|completed|cancelled), resultData, resultNotes
 - `encounter_activities`: HAAD/CPT coded activities per encounter — activityCode, description, category, quantity, unitPrice (AED), total
 
@@ -35,6 +35,7 @@ Session-based auth via `express-session` + `SESSION_SECRET` env var.
 | doctor@clinicflow.ae | doctor123 | doctor | doctorDbId=1 |
 | patient@clinicflow.ae | patient123 | patient | patientDbId=1 |
 | pharmacy@clinicflow.ae | pharmacy123 | pharmacy | — |
+| reception@clinicflow.ae | reception123 | receptionist | — |
 
 ### Auth Middleware
 - `artifacts/api-server/src/lib/session.ts` — `getSessionUser()`, `requireAuth()`, `requireRole()`
@@ -97,6 +98,10 @@ Activity catalogue covers 6 categories: `consultation` (E&M codes 99201–99245)
 - `GET/POST /medications`, `GET/PATCH /medications/:id`
 - `GET/POST /stock`, `GET /stock/alerts`, `PATCH /stock/:id`
 
+### Billing (receptionist + doctor only)
+- `PATCH /consultations/:id/payment` — record payment (status, method, amount, insurance details)
+- `GET /billing/claims?status=partial&from=YYYY-MM-DD&to=YYYY-MM-DD` — enriched insurance claim list with patient info + HAAD activities
+
 ### Dashboard
 - `GET /dashboard/stats` — role-filtered KPIs
 - `GET /dashboard/activity` — role-filtered recent activity feed
@@ -116,6 +121,7 @@ Activity catalogue covers 6 categories: `consultation` (E&M codes 99201–99245)
 - `/prescriptions` — Prescriptions list + pharmacy dispense workflow
 - `/stock` — Pharmacy stock management with low-stock alerts
 - `/appointments` — Appointment list (patient role view)
+- `/billing` — Insurance billing page (receptionist + doctor): date-range filter, claim checklist, printable invoice grouped by insurance company with HAAD/CPT line items
 
 ## Key Implementation Details
 - Role switcher removed from Layout — role is locked to login credentials

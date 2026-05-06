@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -16,6 +16,12 @@ export const consultationsTable = pgTable("consultations", {
   vitals: text("vitals"),
   followUpDate: text("follow_up_date"),
   status: text("status").notNull().default("in_progress"),
+  // Payment / billing
+  paymentStatus: text("payment_status").notNull().default("unpaid"),  // unpaid | paid | exempted | partial
+  paymentMethod: text("payment_method"),                              // cash | card
+  paidAmount: numeric("paid_amount", { precision: 10, scale: 2 }),
+  insuranceCompany: text("insurance_company"),
+  insuranceAmount: numeric("insurance_amount", { precision: 10, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
