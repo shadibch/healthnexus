@@ -20,6 +20,7 @@ export const translations = {
     pendingRx: "Pending Rx",
     stock: "Stock",
     billing: "Billing",
+    findNearby: "Find Nearby",
     logout: "Logout",
 
     // Auth
@@ -188,6 +189,7 @@ export const translations = {
     pendingRx: "وصفات معلقة",
     stock: "المخزون",
     billing: "الفوترة",
+    findNearby: "ابحث بالقرب",
     logout: "تسجيل الخروج",
 
     // Auth

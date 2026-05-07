@@ -16,6 +16,7 @@ import {
   Globe,
   User,
   ShieldCheck,
+  Map,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -84,6 +85,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         { href: "/",              label: t("dashboard"),       icon: LayoutDashboard, badge: 0,                    badgeVariant: "red"   as const },
         { href: "/appointments",  label: t("myAppointments"),  icon: CalendarClock,   badge: 0,                    badgeVariant: "red"   as const },
         { href: "/prescriptions", label: t("myPrescriptions"), icon: FileText,        badge: badges.prescriptions, badgeVariant: "amber" as const },
+        { href: "/map",           label: t("findNearby"),      icon: Map,             badge: 0,                    badgeVariant: "red"   as const },
       ];
     }
     return [

@@ -8,3 +8,5 @@ export * from "./stock";
 export * from "./medical-orders";
 export * from "./encounter-activities";
 export * from "./haad-catalogue";
+export * from "./pharmacies";
+export * from "./pharmacy-inventory";

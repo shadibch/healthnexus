@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useRole } from "@/lib/role";
@@ -14,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Pill, Clock, CheckCircle2, User, Stethoscope } from "lucide-react";
+import { FileText, Pill, Clock, CheckCircle2, User, Stethoscope, MapPin } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -48,6 +49,7 @@ export default function PrescriptionsPage() {
   const { t, isRTL } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dispensing, setDispensing] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -170,6 +172,17 @@ export default function PrescriptionsPage() {
                             dispenseMutation.mutate(rx.id);
                           }} disabled={dispensing === rx.id} className="text-xs">
                             {dispensing === rx.id ? "..." : t("dispense")}
+                          </Button>
+                        )}
+                        {role === "patient" && rx.items.length > 0 && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={cn("text-xs gap-1 text-blue-600 border-blue-300 hover:bg-blue-50", isRTL && "flex-row-reverse")}
+                            onClick={() => navigate("/map?tab=prescription")}
+                          >
+                            <MapPin className="w-3 h-3" />
+                            {isRTL ? "أقرب صيدلية" : "Find Pharmacy"}
                           </Button>
                         )}
                         <Button size="sm" variant="ghost" onClick={() => toggleExpand(rx.id)} className="text-xs">

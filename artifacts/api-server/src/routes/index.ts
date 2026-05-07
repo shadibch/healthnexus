@@ -13,6 +13,7 @@ import dashboardRouter from "./dashboard";
 import ordersRouter from "./orders";
 import activitiesRouter from "./activities";
 import billingRouter from "./billing";
+import mapRouter from "./map";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(dashboardRouter);
 router.use(ordersRouter);
 router.use(activitiesRouter);
 router.use(billingRouter);
+router.use(mapRouter);
 
 export default router;

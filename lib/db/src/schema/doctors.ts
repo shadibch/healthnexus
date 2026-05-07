@@ -13,6 +13,9 @@ export const doctorsTable = pgTable("doctors", {
   isAvailable: boolean("is_available").notNull().default(true),
   consultationFee: numeric("consultation_fee", { precision: 10, scale: 2 }),
   bio: text("bio"),
+  latitude: numeric("latitude", { precision: 10, scale: 6 }),
+  longitude: numeric("longitude", { precision: 10, scale: 6 }),
+  clinicAddress: text("clinic_address"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
