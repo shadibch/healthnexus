@@ -293,7 +293,7 @@ export default function PatientsPage() {
                     {history.prescriptions.slice(-2).map((rx: any) => (
                       <div key={rx.id} className={cn("text-xs py-1 border-t border-border flex items-center justify-between", isRTL && "flex-row-reverse")}>
                         <span className="text-muted-foreground">{new Date(rx.issuedAt).toLocaleDateString(isRTL ? "ar-AE" : "en-AE")}</span>
-                        <span>{rx.items?.length ?? 0} {t("medications")}</span>
+                        <span>{rx.items?.length ?? 0} {t("medicationItems")}</span>
                         <Badge variant={rx.status === "dispensed" ? "default" : "secondary"} className="text-xs ml-1">
                           {rx.status === "dispensed" ? t("dispensed") : t("pending")}
                         </Badge>

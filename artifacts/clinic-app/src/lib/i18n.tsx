@@ -20,6 +20,7 @@ export const translations = {
     pendingRx: "Pending Rx",
     stock: "Stock",
     billing: "Billing",
+    medications: "Medicines",
     findNearby: "Find Nearby",
     logout: "Logout",
 
@@ -63,7 +64,7 @@ export const translations = {
     visitHistory: "Visit History",
     appointments: "appointments",
     recentPrescriptions: "Recent Prescriptions",
-    medications: "medications",
+    medicationItems: "medications",
     allergies: "Allergies",
     medicalNotes: "Medical Notes",
     registerNewPatient: "Register New Patient",
@@ -189,6 +190,7 @@ export const translations = {
     pendingRx: "وصفات معلقة",
     stock: "المخزون",
     billing: "الفوترة",
+    medications: "الأدوية",
     findNearby: "ابحث بالقرب",
     logout: "تسجيل الخروج",
 
@@ -232,7 +234,7 @@ export const translations = {
     visitHistory: "سجل الزيارات",
     appointments: "مواعيد",
     recentPrescriptions: "الوصفات الأخيرة",
-    medications: "أدوية",
+    medicationItems: "أدوية",
     allergies: "الحساسية",
     medicalNotes: "ملاحظات طبية",
     registerNewPatient: "تسجيل مريض جديد",

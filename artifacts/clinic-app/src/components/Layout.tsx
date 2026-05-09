@@ -17,6 +17,7 @@ import {
   User,
   ShieldCheck,
   Map,
+  FlaskConical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -77,6 +78,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         { href: "/queue",         label: t("todaysQueue"),  icon: CalendarClock,   badge: badges.queue,   badgeVariant: "amber" as const },
         { href: "/consultations", label: t("consultations"),icon: Stethoscope,     badge: 0,              badgeVariant: "red"   as const },
         { href: "/prescriptions", label: t("prescriptions"),icon: FileText,        badge: badges.prescriptions, badgeVariant: "amber" as const },
+        { href: "/medications",   label: t("medications"),  icon: FlaskConical,    badge: 0,              badgeVariant: "red"   as const },
         { href: "/billing",       label: t("billing"),      icon: ShieldCheck,     badge: 0,              badgeVariant: "red"   as const },
       ];
     }
