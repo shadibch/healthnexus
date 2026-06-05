@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import ActivitiesPanel from "@/components/ActivitiesPanel";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import MedicationAutocomplete, { type MedicationOption } from "@/components/MedicationAutocomplete";
 import PaymentPanel from "@/components/PaymentPanel";
+import { checkInteractions, checkPregnancyAlerts, checkAllergyAlert, type DrugAlert } from "@/lib/drug-interactions";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -331,6 +332,9 @@ export default function EncounterPage() {
   const [notes, setNotes] = useState("");
   const [followUpDate, setFollowUpDate] = useState("");
 
+  // Visit reason state
+  const [visitReason, setVisitReason] = useState("");
+
   // Prescription builder state
   const [rxItems, setRxItems] = useState<RxItem[]>([]);
   const [rxMed, setRxMed] = useState<MedicationOption | null>(null);
@@ -552,6 +556,33 @@ export default function EncounterPage() {
     ? Math.floor((Date.now() - new Date(patient.dateOfBirth).getTime()) / (365.25 * 24 * 3600 * 1000))
     : null;
 
+  const isPregnant =
+    visitReason === "pregnancy" ||
+    chiefComplaint.toLowerCase().includes("pregnan") ||
+    chiefComplaint.includes("حمل");
+
+  const drugAlerts = useMemo<DrugAlert[]>(() => {
+    const allMeds = [
+      ...rxItems.map((r) => r.medication),
+      ...(rxMed ? [rxMed] : []),
+    ];
+    if (allMeds.length === 0) return [];
+    const alerts: DrugAlert[] = [];
+    // Allergy conflicts
+    for (const med of allMeds) {
+      const a = checkAllergyAlert(med, patient?.allergies ?? null);
+      if (a) alerts.push(a);
+    }
+    // Drug–drug interactions
+    alerts.push(...checkInteractions(allMeds));
+    // Pregnancy contraindications
+    if (isPregnant) {
+      alerts.push(...checkPregnancyAlerts(allMeds));
+    }
+    // Deduplicate by message
+    return alerts.filter((a, i, arr) => arr.findIndex((b) => b.message === a.message) === i);
+  }, [rxItems, rxMed, isPregnant, patient?.allergies]);
+
   const isCompleted = encounter?.status === "completed";
   const hasEncounter = activeEncounterId != null;
   const isEncounterLoading = hasEncounter && loadingEncounter;
@@ -692,6 +723,70 @@ export default function EncounterPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="px-4 pb-4 space-y-3">
+                  {/* Visit Reason / Expected Disease */}
+                  <div>
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      {lang === "ar" ? "سبب الزيارة / الحالة المتوقعة" : "Visit Reason / Expected Condition"}
+                    </Label>
+                    <select
+                      className="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                      value={visitReason}
+                      disabled={isCompleted}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setVisitReason(val);
+                        const presets: Record<string, { en: string; ar: string }> = {
+                          sick:        { en: "Sick visit — general complaint", ar: "زيارة مرضية — شكوى عامة" },
+                          annual_40:   { en: "Annual check-up (patient 40+)", ar: "فحص دوري سنوي (عمر 40+)" },
+                          pregnancy:   { en: "Pregnancy follow-up", ar: "متابعة الحمل" },
+                          bp:          { en: "Blood pressure follow-up", ar: "متابعة ضغط الدم" },
+                          diabetes:    { en: "Diabetes follow-up", ar: "متابعة مرض السكري" },
+                          cardiac:     { en: "Cardiac follow-up", ar: "متابعة أمراض القلب" },
+                          respiratory: { en: "Respiratory infection", ar: "عدوى تنفسية" },
+                          uti:         { en: "Urinary tract infection", ar: "عدوى المسالك البولية" },
+                          postop:      { en: "Post-operative follow-up", ar: "متابعة ما بعد العملية" },
+                          vaccination: { en: "Vaccination", ar: "تطعيم" },
+                          injury:      { en: "Injury / Trauma", ar: "إصابة / صدمة" },
+                          skin:        { en: "Skin condition", ar: "حالة جلدية" },
+                          mental:      { en: "Mental health", ar: "الصحة النفسية" },
+                          labs:        { en: "Lab results review", ar: "مراجعة نتائج التحاليل" },
+                        };
+                        if (val && presets[val] && !chiefComplaint) {
+                          setChiefComplaint(lang === "ar" ? presets[val].ar : presets[val].en);
+                        }
+                      }}
+                    >
+                      <option value="">{lang === "ar" ? "اختر سبب الزيارة..." : "Select visit reason..."}</option>
+                      <optgroup label={lang === "ar" ? "فحوص دورية" : "Periodic Checks"}>
+                        <option value="annual_40">{lang === "ar" ? "فحص دوري سنوي (عمر 40+)" : "Annual Check-up (40+)"}</option>
+                        <option value="vaccination">{lang === "ar" ? "تطعيم" : "Vaccination"}</option>
+                        <option value="labs">{lang === "ar" ? "مراجعة نتائج التحاليل" : "Lab Results Review"}</option>
+                      </optgroup>
+                      <optgroup label={lang === "ar" ? "متابعة أمراض مزمنة" : "Chronic Disease Follow-up"}>
+                        <option value="bp">{lang === "ar" ? "متابعة ضغط الدم" : "Blood Pressure Follow-up"}</option>
+                        <option value="diabetes">{lang === "ar" ? "متابعة مرض السكري" : "Diabetes Follow-up"}</option>
+                        <option value="cardiac">{lang === "ar" ? "متابعة أمراض القلب" : "Cardiac Follow-up"}</option>
+                      </optgroup>
+                      <optgroup label={lang === "ar" ? "أمراض حادة" : "Acute Illness"}>
+                        <option value="sick">{lang === "ar" ? "زيارة مرضية عامة" : "Sick Visit (General)"}</option>
+                        <option value="respiratory">{lang === "ar" ? "عدوى تنفسية" : "Respiratory Infection"}</option>
+                        <option value="uti">{lang === "ar" ? "عدوى المسالك البولية" : "Urinary Tract Infection"}</option>
+                        <option value="injury">{lang === "ar" ? "إصابة / صدمة" : "Injury / Trauma"}</option>
+                        <option value="skin">{lang === "ar" ? "حالة جلدية" : "Skin Condition"}</option>
+                        <option value="mental">{lang === "ar" ? "الصحة النفسية" : "Mental Health"}</option>
+                      </optgroup>
+                      <optgroup label={lang === "ar" ? "رعاية الأمومة" : "Maternity Care"}>
+                        <option value="pregnancy">{lang === "ar" ? "متابعة الحمل" : "Pregnancy Follow-up"}</option>
+                        <option value="postop">{lang === "ar" ? "متابعة ما بعد العملية" : "Post-operative Follow-up"}</option>
+                      </optgroup>
+                    </select>
+                    {isPregnant && (
+                      <p className="mt-1 text-xs font-medium text-pink-700 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        {lang === "ar" ? "مريضة حامل — سيتم تفعيل فحص موانع الحمل للأدوية" : "Pregnant patient — pregnancy drug contraindications active"}
+                      </p>
+                    )}
+                  </div>
                   <div>
                     <Label className="text-xs font-medium text-muted-foreground">{lang === "ar" ? "الشكوى الرئيسية" : "Chief Complaint"}</Label>
                     <Textarea className="mt-1" rows={2} value={chiefComplaint} onChange={(e) => setChiefComplaint(e.target.value)}
@@ -767,6 +862,33 @@ export default function EncounterPage() {
                                 </div>
                               </div>
                             ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Drug interaction / pregnancy / allergy alerts */}
+                  {drugAlerts.length > 0 && (
+                    <div className="space-y-2">
+                      {drugAlerts.map((alert, idx) => (
+                        <div
+                          key={idx}
+                          className={cn(
+                            "flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-xs font-medium",
+                            alert.severity === "danger"
+                              ? "border-red-400 bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-300 dark:border-red-700"
+                              : "border-amber-400 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-700"
+                          )}
+                        >
+                          <AlertCircle className={cn("w-4 h-4 shrink-0 mt-0.5", alert.severity === "danger" ? "text-red-500" : "text-amber-500")} />
+                          <div className={cn("flex-1", isRTL && "text-right")}>
+                            <span className="font-semibold uppercase tracking-wide mr-1.5">
+                              {alert.severity === "danger"
+                                ? (lang === "ar" ? "تحذير طبي" : "Drug Alert")
+                                : (lang === "ar" ? "تنبيه" : "Caution")}
+                            </span>
+                            {lang === "ar" ? alert.messageAr : alert.message}
                           </div>
                         </div>
                       ))}
