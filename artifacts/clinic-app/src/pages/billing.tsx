@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { useClinicSettings } from "@/lib/clinic-settings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,7 @@ function firstOfMonth() {
 export default function BillingPage() {
   const { lang, isRTL } = useI18n();
   const ar = lang === "ar";
+  const { clinicName, logoBase64 } = useClinicSettings();
   const printRef = useRef<HTMLDivElement>(null);
 
   const [from, setFrom] = useState(firstOfMonth());
@@ -233,7 +235,12 @@ export default function BillingPage() {
                 <div className="border-b-2 border-slate-800 pb-4 mb-6">
                   <div className="flex justify-between items-start">
                     <div>
-                      <h1 className="text-2xl font-bold text-slate-900">ClinicFlow</h1>
+                      <div className="flex items-center gap-2">
+                        {logoBase64 && (
+                          <img src={logoBase64} alt="logo" className="w-8 h-8 rounded object-cover" />
+                        )}
+                        <h1 className="text-2xl font-bold text-slate-900">{clinicName}</h1>
+                      </div>
                       <p className="text-sm text-slate-500">Hospital & Clinic Management · MEA Edition</p>
                     </div>
                     <div className="text-right">

@@ -10,3 +10,4 @@ export * from "./encounter-activities";
 export * from "./haad-catalogue";
 export * from "./pharmacies";
 export * from "./pharmacy-inventory";
+export * from "./clinic-settings";

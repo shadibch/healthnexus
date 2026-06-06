@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
+import { useClinicSettings } from "@/lib/clinic-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,6 +59,7 @@ const DEMO_ACCOUNTS = [
 export default function LoginPage() {
   const { login } = useAuth();
   const { t, lang, setLang, isRTL } = useI18n();
+  const { clinicName, logoBase64 } = useClinicSettings();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -88,10 +90,14 @@ export default function LoginPage() {
       <div className="w-full max-w-md space-y-4">
         {/* Logo */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary shadow-lg mb-2">
-            <Stethoscope className="w-7 h-7 text-primary-foreground" />
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary shadow-lg mb-2 overflow-hidden">
+            {logoBase64 ? (
+              <img src={logoBase64} alt="logo" className="w-full h-full object-cover" />
+            ) : (
+              <Stethoscope className="w-7 h-7 text-primary-foreground" />
+            )}
           </div>
-          <h1 className="text-3xl font-bold text-foreground">{t("appName")}</h1>
+          <h1 className="text-3xl font-bold text-foreground">{clinicName}</h1>
           <p className="text-muted-foreground text-sm">{t("signInSubtitle")}</p>
         </div>
 

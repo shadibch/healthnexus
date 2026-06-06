@@ -19,7 +19,9 @@ import {
   Map,
   FlaskConical,
   BarChart2,
+  Settings,
 } from "lucide-react";
+import { useClinicSettings } from "@/lib/clinic-settings";
 import { Button } from "@/components/ui/button";
 
 const ROLE_DOT: Record<Role, string> = {
@@ -54,6 +56,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { t, lang, setLang, isRTL } = useI18n();
   const [location] = useLocation();
   const badges = useNavBadges();
+  const { clinicName, logoBase64 } = useClinicSettings();
 
   const ROLE_LABELS: Record<Role, string> = {
     doctor:       t("doctorView"),
@@ -70,6 +73,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         { href: "/appointments", label: t("appointments"),    icon: CalendarClock,   badge: badges.queue, badgeVariant: "amber" as const },
         { href: "/queue",        label: t("todaysQueue"),     icon: FileText,        badge: badges.queue, badgeVariant: "amber" as const },
         { href: "/billing",      label: t("billing"),         icon: ShieldCheck,     badge: 0,            badgeVariant: "red"   as const },
+        { href: "/settings",     label: lang === "ar" ? "الإعدادات" : "Settings", icon: Settings, badge: 0, badgeVariant: "red" as const },
       ];
     }
     if (r === "doctor") {
@@ -81,7 +85,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         { href: "/prescriptions", label: t("prescriptions"),icon: FileText,        badge: badges.prescriptions, badgeVariant: "amber" as const },
         { href: "/medications",   label: t("medications"),  icon: FlaskConical,    badge: 0,              badgeVariant: "red"   as const },
         { href: "/billing",       label: t("billing"),      icon: ShieldCheck,     badge: 0,              badgeVariant: "red"   as const },
-        { href: "/reports",       label: lang === "ar" ? "التقارير" : "Reports", icon: BarChart2, badge: 0, badgeVariant: "red" as const },
+        { href: "/reports",       label: lang === "ar" ? "التقارير" : "Reports",  icon: BarChart2,  badge: 0, badgeVariant: "red" as const },
+        { href: "/settings",      label: lang === "ar" ? "الإعدادات" : "Settings", icon: Settings, badge: 0, badgeVariant: "red" as const },
       ];
     }
     if (r === "patient") {
@@ -107,14 +112,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Logo */}
       <div className={cn("flex items-center gap-2.5 px-5 h-16 border-b border-border shrink-0", isRTL && "flex-row-reverse")}>
         <div className="relative shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <Stethoscope className="w-4 h-4 text-primary-foreground" />
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center overflow-hidden">
+            {logoBase64 ? (
+              <img src={logoBase64} alt="logo" className="w-full h-full object-cover" />
+            ) : (
+              <Stethoscope className="w-4 h-4 text-primary-foreground" />
+            )}
           </div>
           {totalAlerts > 0 && (
             <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-destructive border-2 border-sidebar animate-pulse" />
           )}
         </div>
-        <span className="font-bold text-lg tracking-tight text-sidebar-foreground">{t("appName")}</span>
+        <span className="font-bold text-lg tracking-tight text-sidebar-foreground">{clinicName}</span>
       </div>
 
       {/* Role badge — read-only, reflects login role */}
