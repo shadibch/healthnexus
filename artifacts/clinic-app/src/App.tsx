@@ -19,6 +19,7 @@ import EncounterPage from "@/pages/encounter";
 import BillingPage from "@/pages/billing";
 import MedicationsPage from "@/pages/medications";
 import MapPage from "@/pages/map";
+import ReportsPage from "@/pages/reports";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -63,6 +64,7 @@ function AppRoutes() {
           <Route path="/billing" component={BillingPage} />
           <Route path="/medications" component={MedicationsPage} />
           <Route path="/map" component={MapPage} />
+          <Route path="/reports" component={ReportsPage} />
           <Route component={NotFound} />
         </Switch>
       </Layout>

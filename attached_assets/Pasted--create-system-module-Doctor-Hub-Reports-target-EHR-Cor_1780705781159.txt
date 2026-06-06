@@ -1,0 +1,74 @@
+/create-system-module "Doctor Hub Reports"
+- target: EHR_Core_Data
+- vibe: crisp, high-signal, dark-mode-optimized, zero-clutter
+
+# 1. CORE CLINICAL REPORTS
+generate PatientSummary Report {
+    include: [demographics, active_diagnoses, allergies, current_meds, active_problems, recent_visits_30d]
+    layout: "dashboard widget, summary card first"
+}
+
+generate EncounterNote Report {
+    include: [soap_history, exam_findings, assessment, clinical_plan]
+    rules: "strict compliance validation, check for missing signatures before close"
+}
+
+generate VitalTrends Report {
+    include: [bp, pulse, temp, weight]
+    render: "interactive sparklines and time-series graphs"
+    default_range: "last 6 months"
+}
+
+generate LabResults Report {
+    include: [ordered_tests, current_values, reference_ranges, history_trend]
+    rules: "highlight critical/abnormal values in bold amber/red alert colors"
+}
+
+generate RadiologyImaging Report {
+    include: [radiology_findings, radiologist_impression, dicom_viewer_link]
+    modal: "split-screen view (report on left, image stack on right)"
+}
+
+generate MedicationManagement Report {
+    include: [active_meds, discontinued_meds, exact_dosage, renewal_status, fill_history]
+}
+
+generate AllergySafety Report {
+    include: [allergen, reaction_severity, documentation_date]
+    behavior: "sticky banner on top of all patient views"
+}
+
+generate ProblemList Report {
+    include: [active_conditions, resolved_conditions, onset_date, icd_10_codes]
+}
+
+generate ImmunizationTracker Report {
+    include: [vaccine_type, dose_number, date_administered, public_health_sync_status]
+}
+
+generate ReferralFollowUp Report {
+    include: [referring_provider, receiving_provider, reason_for_referral, loop_closed_status]
+}
+
+generate QualityOutcomes Analytics {
+    include: [hedis_measures, care_gaps, clinical_performance_metrics]
+    scope: "provider-level and clinic-level aggregates"
+}
+
+# 2. SPECIALTY VIEWS & ROUTING
+apply SpecialtyPerspectives {
+    when Specialty == "Primary Care" -> prioritize [ProblemList, VitalTrends, ImmunizationTracker, QualityOutcomes]
+    when Specialty == "Emergency" -> prioritize [PatientSummary, AllergySafety, MedicationManagement, EncounterNote] -> layout "ultra-fast triage grid"
+    when Specialty == "Specialist" -> prioritize [ReferralFollowUp, LabResults, RadiologyImaging]
+    when Specialty == "Inpatient/Hospitalist" -> prioritize [AdmissionsDischargeTransfer, PatientCensus, ActiveOrderStatuses, DischargeSummaries]
+}
+
+# 3. GLOBAL UX & FILTERING BEHAVIOR
+configure ReportUX {
+    format: "short, highly searchable, infinite scroll, avoid static print layouts"
+    global_filters: [date_range, provider_id, diagnosis_code, department, urgency_level]
+    default_sort: "chronological_descending (newest clinical data always floats to top)"
+    features: ["instant global search bar", "one-click trend toggle"]
+}
+
+/deploy --hot-reload

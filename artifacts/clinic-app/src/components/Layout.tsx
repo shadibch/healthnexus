@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Map,
   FlaskConical,
+  BarChart2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -80,6 +81,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         { href: "/prescriptions", label: t("prescriptions"),icon: FileText,        badge: badges.prescriptions, badgeVariant: "amber" as const },
         { href: "/medications",   label: t("medications"),  icon: FlaskConical,    badge: 0,              badgeVariant: "red"   as const },
         { href: "/billing",       label: t("billing"),      icon: ShieldCheck,     badge: 0,              badgeVariant: "red"   as const },
+        { href: "/reports",       label: lang === "ar" ? "التقارير" : "Reports", icon: BarChart2, badge: 0, badgeVariant: "red" as const },
       ];
     }
     if (r === "patient") {
