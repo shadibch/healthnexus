@@ -4,11 +4,23 @@ import { apiFetch } from "./api";
 export interface ClinicSettings {
   clinicName: string;
   logoBase64: string | null;
+  // Physical address
+  address: string | null;
+  city: string | null;
+  country: string | null;
+  // GPS coordinates — null until configured; ready to pass into Google Maps / embed links
+  latitude: number | null;
+  longitude: number | null;
 }
 
 const DEFAULTS: ClinicSettings = {
   clinicName: "HealthNexus Medical Center",
   logoBase64: null,
+  address: null,
+  city: null,
+  country: null,
+  latitude: null,
+  longitude: null,
 };
 
 export const CLINIC_SETTINGS_QUERY_KEY = ["clinic-settings"] as const;
@@ -19,7 +31,6 @@ export function useClinicSettings(): ClinicSettings & { isLoading: boolean } {
     queryFn: () => apiFetch<ClinicSettings>("/settings"),
     staleTime: 5 * 60 * 1000,
     retry: 1,
-    // Fetch even if not authenticated — GET /settings is public
     refetchOnWindowFocus: false,
   });
   return { ...(data ?? DEFAULTS), isLoading };
