@@ -1,0 +1,31 @@
+Build a multi-step "New Patient Registration" form and backend system for the Health Information System. The system should collect demographics, contact details, emergency contacts, insurance information, and a baseline medical disclosure.
+
+Please implement the following requirements:
+
+1. Database Schema & Models:
+   - Create a 'Patient' model/table with fields for:
+     - Identification: Full Name, Date of Birth, Gender (Legal/Birth), National ID/Passport Number, and Nationality.
+     - Contact: Phone Number, Email Address, and Home Address (Street, City, Postal Code).
+     - Emergency Contact: Contact Name, Relationship, and Contact Phone.
+     - Insurance: Insurance Provider, Policy/Card Number, Expiry Date, and Primary Policyholder Name.
+     - Medical Disclosure: Text fields/arrays for Allergies, Chronic Conditions, and Current Medications.
+   - Generate unique, auto-incrementing or UUID-based Patient IDs upon successful creation.
+
+2. Frontend UI/UX (Multi-Step Wizard):
+   - Implement a clean, responsive multi-step wizard component.
+   - Step 1: Demographics & Identification
+   - Step 2: Contact & Emergency Details
+   - Step 3: Insurance & Billing
+   - Step 4: Baseline Medical Disclosure (Include a clear toggle for "No Known Drug Allergies / NKDA").
+   - Include a visual step-indicator bar at the top, along with "Next" and "Back" buttons at the bottom. The final step should have a "Submit Registration" button.
+
+3. Frontend Validation:
+   - Enforce required fields on each step before allowing the user to click "Next".
+   - Validate formatting: Email fields must match standard patterns, Phone Numbers must accept valid country formats, and Dates of Birth cannot be in the future.
+   - Highlight invalid fields clearly with inline error text.
+
+4. Backend API & Processing:
+   - Build a POST endpoint (e.g., `/api/patients/register`) that accepts the multi-step payload, runs server-side structural validation, and persists the data to the database.
+   - Return a clear success response containing the newly generated Patient Profile data and their unique Patient ID. Include a success toast or confirmation message on the UI.
+
+Please wire up the frontend components, API endpoints, and database models to support this complete intake workflow.

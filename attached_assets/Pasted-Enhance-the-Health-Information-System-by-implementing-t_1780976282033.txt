@@ -1,0 +1,21 @@
+Enhance the Health Information System by implementing two major features: Multi-Role Staff Management for Medical Center Admins, and a "Find Nearest Medical Center" proximity search for Patients based on GPS coordinates.
+
+Please implement the following requirements:
+
+1. Admin Staff Management Dashboard:
+   - For users with the 'ADMIN' role who have set up a Medical Center, provide a "Staff Management" dashboard interface.
+   - Add a "Create Staff Account" button that opens a form allowing the Admin to provision accounts for three roles: 'DOCTOR', 'PHARMACIST', and 'RECEPTIONIST'.
+   - The form should collect: Full Name, Work Email, Contact Phone, and a temporary password (or send a setup email).
+   - Backend logic: When an Admin creates a staff account, that new User record must be automatically linked via a foreign key ('medical_center_id') to the Admin's specific Medical Center entity, strictly enforcing tenant isolation.
+
+2. Patient Proximity Search ("Find Nearest Medical Center"):
+   - For users logged in with the 'PATIENT' role, create a "Find Care" or "Medical Centers" portal page.
+   - UI/UX: Show a button labeled "Use My Current Location" that utilizes the browser's Geolocation API (`navigator.geolocation`) to securely fetch the patient's current Latitude and Longitude. Alternatively, let them type a manual city/address.
+   - Proximity Calculation: Send the patient's coordinates to a new backend endpoint (e.g., `/api/medical-centers/nearby`). Write a backend service that uses the Haversine formula (or native database geospatial extensions like PostGIS or SQLite's math functions) to calculate the distance in kilometers or miles between the patient's coordinates and all stored Medical Center coordinates.
+   - Results Layout: Render a clean, sorting list of the nearest Medical Centers. Each card must prominently display: Medical Center Name, Logo, calculated Distance (e.g., "1.2 km away"), physical Street Address, and a button to "Book Appointment" or "View Details".
+
+3. Database Schema Modifications:
+   - Ensure the 'Users' table supports roles: 'DOCTOR', 'PHARMACIST', 'RECEPTIONIST'.
+   - Add a 'medical_center_id' field to the 'Users' (or a separate 'StaffProfile') table so doctors, pharmacists, and receptionists are definitively anchored to a specific facility.
+
+Please wire up the frontend dashboards, geolocation API integrations, backend proximity logic, and updated database models to support this flow.

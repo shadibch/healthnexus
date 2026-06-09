@@ -1,0 +1,24 @@
+Implement an Email Account Activation system and a secure Forgot Password workflow for the Health Information System.
+
+Please implement the following requirements:
+
+1. Account Activation Workflow (Signup Phase):
+   - When a user signs up using their Email/Password, set their account status to 'inactive' (e.g., active=false or status='PENDING_ACTIVATION') and block them from choosing a role or accessing the system.
+   - Backend: Generate a secure, unique, and random activation token. Store this token in the database linked to the user, or use a secure signed token (like a JWT) with an expiration window (e.g., 24 hours).
+   - Email Delivery: Trigger an email to the user's registered email address containing a clear activation link (e.g., `/api/auth/activate?token=XYZ`). 
+   - UX Screen: After signup, show a clean "Check Your Email" landing page instructing the user to click the activation link. If they click the link and the token is valid, update their status to 'active' and seamlessly route them to the Role Selection screen.
+
+2. Forgot Password Recovery Workflow:
+   - Create a "Forgot Password" link on the Login screen that routes users to a simple page requesting their registered email address.
+   - Backend Token Generation: Upon submission, check if the email exists. If it does, generate a secure, temporary password-reset token. 
+   - Strict Expiration: Save a timestamp for this token ensuring it strictly expires exactly 10 minutes after creation.
+   - Email Delivery: Send a clean email to the user with a distinct reset link (e.g., `/reset-password?token=XYZ`).
+   - Security Handling: If the user requests a password reset multiple times, invalidate any previously sent reset tokens so only the newest one works.
+
+3. Password Reset Form UI:
+   - Build a landing page for the `/reset-password` route that parses the token from the URL.
+   - The page must contain two input fields: "New Password" and "Confirm New Password".
+   - Frontend Validation: Enforce that both fields match exactly and meet basic security strength criteria (e.g., minimum 8 characters) before allowing submission.
+   - Expiration Check: When the user hits "Update Password", the backend must verify that the 10-minute window has not passed. If valid, hash the new password, update the database, delete/consume the token, and redirect the user to the login screen with a success message. If expired, show an error: "This link has expired. Please request a new password reset."
+
+Please configure the backend email dispatch service (using a mockup/console.log utility or standard SMTP configuration), token expiration logic, backend verification routes, and frontend recovery views to complete these security loops.

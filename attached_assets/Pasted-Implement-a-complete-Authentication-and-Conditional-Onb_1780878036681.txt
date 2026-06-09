@@ -1,0 +1,28 @@
+Implement a complete Authentication and Conditional Onboarding workflow for the Health Information System. The system must support Email/Password signup and Google OpenID (OAuth2) login, followed by a role selection screen that routes users to separate onboarding forms.
+
+Please implement the following requirements:
+
+1. Authentication Layer (Step 1):
+   - Create a uniform Login/Signup interface that features standard "Email & Password" input alongside a "Sign in with Google" OpenID button.
+   - Use a clean layout to separate credential inputs from social single sign-on options.
+   - Manage authentication states globally (JWT or session-based), storing user email and profile status upon successful verification.
+
+2. Role Selection Screen (Step 2):
+   - Immediately after a new user signs up (and before they can access the dashboard), display a dedicated choice screen: "Choose Your Account Type".
+   - Present two prominent, clear options:
+     - Option A: "Patient" (Seeking care, booking appointments).
+     - Option B: "Medical Center Admin" (Managing a clinic, tracking staff/billing).
+   - Once a choice is made and submitted, lock this role to the User model/table in the database.
+
+3. Conditional Onboarding Workflows (Step 3):
+   - IF ROLE IS PATIENT:
+     - Route the user to a Multi-Step Patient Intake Form. Collect Demographics (Name, DOB, National ID), Contact Info, Emergency Contact, Insurance details, and a baseline Medical Disclosure (Allergies/Medications).
+   - IF ROLE IS MEDICAL CENTER ADMIN:
+     - Route the user to a "Setup Medical Center" profile form. Collect Medical Center Name, Physical Address (Street, City, Country, Postal Code), exact GPS Coordinates (Latitude & Longitude decimal fields with an auto-fetch helper), and an official Medical Center Logo file upload field (supporting PNG/JPEG with an image preview). Include an optional field for Primary Contact Phone/Support Email for the clinic.
+
+4. Backend Models, Routing, & State Enforcement:
+   - Update the User model schema to include 'role' (enum: 'PATIENT', 'ADMIN', 'PENDING') and 'onboarding_complete' (boolean).
+   - Create separate or linked data relationships: A Patient profile should tie directly to the authenticated User ID; an Admin profile should instantiate a new 'MedicalCenter' tenant entity tied to that Admin's User ID.
+   - Implement backend middleware or route guards to ensure that any user with 'onboarding_complete=false' is forcefully redirected to their respective onboarding step and cannot access main application views until the form is submitted.
+
+Please wire up the frontend routes, authentication state, conditional step forms, backend schema modifications, and API endpoints to complete this integrated onboarding flow.
