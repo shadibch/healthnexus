@@ -10,6 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@clerk/express": "^2.1.23",
+    "@clerk/shared": "^4.15.0",
     "@types/express-session": "^1.19.0",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
@@ -18,6 +20,7 @@
     "drizzle-orm": "catalog:",
     "express": "^5",
     "express-session": "^1.19.0",
+    "http-proxy-middleware": "^4.1.0",
     "pino": "^9",
     "pino-http": "^10"
   },
