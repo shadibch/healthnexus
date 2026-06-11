@@ -117,7 +117,7 @@ router.post("/consultations", requireAuth, async (req, res): Promise<void> => {
     .where(
       and(
         eq(consultationsTable.patientId, patientId),
-        lt(sevenDaysAgo, consultationsTable.createdAt)
+        lt(consultationsTable.createdAt, sevenDaysAgo)
       )
     )
     .orderBy(desc(consultationsTable.createdAt))
@@ -222,7 +222,7 @@ router.patch("/consultations/:id", requireAuth, async (req, res): Promise<void> 
 
 // Medical orders for a consultation
 router.get("/consultations/:id/orders", requireAuth, async (req, res): Promise<void> => {
-  const idNum = parseInt(req.params.id);
+  const idNum = parseInt(String(req.params.id));
   if (isNaN(idNum)) { res.status(400).json({ error: "Invalid id" }); return; }
   const orders = await db
     .select()
@@ -239,7 +239,7 @@ router.post("/consultations/:id/orders", requireAuth, async (req, res): Promise<
     return;
   }
 
-  const idNum = parseInt(req.params.id);
+  const idNum = parseInt(String(req.params.id));
   if (isNaN(idNum)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [consultation] = await db

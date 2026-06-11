@@ -243,7 +243,7 @@ router.patch("/appointments/:id/cancel", requireAuth, async (req, res): Promise<
     res.status(403).json({ error: "Only patients can use self-cancel" }); return;
   }
 
-  const apptId = parseInt(req.params.id);
+  const apptId = parseInt(String(req.params.id));
   const [appointment] = await db
     .select()
     .from(appointmentsTable)
@@ -275,7 +275,7 @@ router.patch("/appointments/:id/reschedule", requireAuth, async (req, res): Prom
     res.status(403).json({ error: "Only patients can use self-reschedule" }); return;
   }
 
-  const apptId = parseInt(req.params.id);
+  const apptId = parseInt(String(req.params.id));
   const { scheduledAt, doctorId } = req.body;
 
   if (!scheduledAt) { res.status(400).json({ error: "scheduledAt is required" }); return; }

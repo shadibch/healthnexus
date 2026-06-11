@@ -1,57 +1,46 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
+import { useUser } from "@clerk/react";
+import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "./api";
 
+export type AppRole = "admin" | "doctor" | "patient" | "pharmacist" | "pharmacy" | "receptionist" | "pending";
+
 export interface AuthUser {
-  id: string;
+  userId: number;
+  clerkId: string;
+  role: AppRole;
   name: string;
   email: string;
-  role: "doctor" | "patient" | "pharmacy" | "receptionist";
-  title: string | null;
-  specialization: string | null;
+  onboardingComplete: boolean;
+  medicalCenterId: number | null;
   doctorDbId: number | null;
   patientDbId: number | null;
+  aiAssistantEnabled: boolean;
+  subscriptionPlan: string;
 }
 
 type AuthContextType = {
   user: AuthUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
 };
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  loading: true,
-  login: async () => {},
-  logout: async () => {},
-});
+const AuthContext = createContext<AuthContextType>({ user: null, loading: true });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { isLoaded: clerkLoaded, isSignedIn } = useUser();
 
-  useEffect(() => {
-    apiFetch<AuthUser>("/auth/me")
-      .then(setUser)
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
-  }, []);
+  const { data: user, isLoading } = useQuery<AuthUser | null>({
+    queryKey: ["auth-me"],
+    queryFn: () => apiFetch<AuthUser>("/auth/me"),
+    enabled: clerkLoaded && !!isSignedIn,
+    retry: false,
+    staleTime: 30_000,
+  });
 
-  const login = async (email: string, password: string) => {
-    const u = await apiFetch<AuthUser>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    });
-    setUser(u);
-  };
-
-  const logout = async () => {
-    await apiFetch("/auth/logout", { method: "POST" }).catch(() => {});
-    setUser(null);
-  };
+  const loading = !clerkLoaded || (!!isSignedIn && isLoading);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user: user ?? null, loading }}>
       {children}
     </AuthContext.Provider>
   );

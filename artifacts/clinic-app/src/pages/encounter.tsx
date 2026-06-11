@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import MedicationAutocomplete, { type MedicationOption } from "@/components/MedicationAutocomplete";
 import PaymentPanel from "@/components/PaymentPanel";
+import { AiDiagnosePanel, AiPrescriptionPanel } from "@/components/AiAssistant";
 import { checkInteractions, checkPregnancyAlerts, checkAllergyAlert, type DrugAlert } from "@/lib/drug-interactions";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -322,6 +323,8 @@ export default function EncounterPage() {
   const apptId = parseInt(appointmentId ?? "0");
 
   const [addOrderOpen, setAddOrderOpen] = useState(false);
+  const [pendingOrderType, setPendingOrderType] = useState<string | null>(null);
+  const [pendingOrderName, setPendingOrderName] = useState<string | null>(null);
   const [resultOrder, setResultOrder] = useState<MedicalOrder | null>(null);
 
   // Form state
@@ -792,6 +795,17 @@ export default function EncounterPage() {
                     <Textarea className="mt-1" rows={2} value={chiefComplaint} onChange={(e) => setChiefComplaint(e.target.value)}
                       placeholder={lang === "ar" ? "ما يشكو منه المريض..." : "Patient's presenting complaint..."} disabled={isCompleted} />
                   </div>
+                  <AiDiagnosePanel
+                    chiefComplaint={chiefComplaint}
+                    vitals={vitals}
+                    patient={patient ?? undefined}
+                    onAddOrder={(type, name) => {
+                      setPendingOrderType(type);
+                      setPendingOrderName(name);
+                      setAddOrderOpen(true);
+                    }}
+                  />
+
                   <div>
                     <Label className="text-xs font-medium text-muted-foreground">{lang === "ar" ? "التشخيص" : "Diagnosis"}</Label>
                     <Textarea className="mt-1" rows={2} value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)}
@@ -894,6 +908,23 @@ export default function EncounterPage() {
                       ))}
                     </div>
                   )}
+
+                  <AiPrescriptionPanel
+                    diagnosis={diagnosis}
+                    chiefComplaint={chiefComplaint}
+                    patient={patient ?? undefined}
+                    currentRxItems={rxItems.map(r => ({
+                      name: r.medication.genericName ?? r.medication.name,
+                      dosage: r.dosage,
+                      frequency: r.frequency,
+                      duration: r.duration,
+                    }))}
+                    onAddMedication={(med) => {
+                      setRxDosage(med.dosage);
+                      setRxFrequency(med.frequency);
+                      setRxDuration(med.duration);
+                    }}
+                  />
 
                   {/* Builder — only shown when encounter is open */}
                   {!isCompleted && (

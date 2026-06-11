@@ -7,7 +7,7 @@ const router: IRouter = Router();
 
 router.patch("/orders/:id", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  const idNum = parseInt(req.params.id);
+  const idNum = parseInt(String(req.params.id));
   if (isNaN(idNum)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [existing] = await db.select().from(medicalOrdersTable).where(eq(medicalOrdersTable.id, idNum));
@@ -39,7 +39,7 @@ router.delete("/orders/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(403).json({ error: "Only doctors can cancel orders" });
     return;
   }
-  const idNum = parseInt(req.params.id);
+  const idNum = parseInt(String(req.params.id));
   if (isNaN(idNum)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   await db.update(medicalOrdersTable)

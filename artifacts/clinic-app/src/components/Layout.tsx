@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useRole, type Role } from "@/lib/role";
 import { useAuth } from "@/lib/auth";
+import { useClerk } from "@clerk/react";
 import { useI18n } from "@/lib/i18n";
 import { useNavBadges } from "@/hooks/use-badges";
 import { cn } from "@/lib/utils";
@@ -20,22 +21,29 @@ import {
   FlaskConical,
   BarChart2,
   Settings,
+  Building2,
 } from "lucide-react";
 import { useClinicSettings } from "@/lib/clinic-settings";
 import { Button } from "@/components/ui/button";
 
-const ROLE_DOT: Record<Role, string> = {
+const ROLE_DOT: Record<string, string> = {
   doctor:       "bg-emerald-500",
   patient:      "bg-blue-500",
   pharmacy:     "bg-purple-500",
+  pharmacist:   "bg-purple-500",
   receptionist: "bg-orange-500",
+  admin:        "bg-blue-700",
+  pending:      "bg-slate-400",
 };
 
-const ROLE_BADGE: Record<Role, string> = {
+const ROLE_BADGE: Record<string, string> = {
   doctor:       "bg-emerald-100 text-emerald-800",
   patient:      "bg-blue-100 text-blue-800",
   pharmacy:     "bg-purple-100 text-purple-800",
+  pharmacist:   "bg-purple-100 text-purple-800",
   receptionist: "bg-orange-100 text-orange-800",
+  admin:        "bg-blue-100 text-blue-800",
+  pending:      "bg-slate-100 text-slate-600",
 };
 
 function NavBadge({ count, variant = "red" }: { count: number; variant?: "red" | "amber" }) {
@@ -52,20 +60,31 @@ function NavBadge({ count, variant = "red" }: { count: number; variant?: "red" |
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { role } = useRole();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const { signOut } = useClerk();
   const { t, lang, setLang, isRTL } = useI18n();
   const [location] = useLocation();
   const badges = useNavBadges();
   const { clinicName, logoBase64 } = useClinicSettings();
 
-  const ROLE_LABELS: Record<Role, string> = {
+  const ROLE_LABELS: Record<string, string> = {
     doctor:       t("doctorView"),
     patient:      t("patientView"),
     pharmacy:     t("pharmacyView"),
+    pharmacist:   t("pharmacyView"),
     receptionist: t("receptionView"),
+    admin:        lang === "ar" ? "مدير النظام" : "Admin",
+    pending:      lang === "ar" ? "جاري الإعداد" : "Setting up...",
   };
 
-  function navItems(r: Role) {
+  function navItems(r: string) {
+    if (r === "admin") {
+      return [
+        { href: "/",       label: lang === "ar" ? "لوحة التحكم" : "Dashboard",  icon: Building2,       badge: 0, badgeVariant: "red" as const },
+        { href: "/admin",  label: lang === "ar" ? "إدارة الموظفين" : "Staff",   icon: Users,           badge: 0, badgeVariant: "red" as const },
+        { href: "/settings", label: lang === "ar" ? "الإعدادات" : "Settings",   icon: Settings,        badge: 0, badgeVariant: "red" as const },
+      ];
+    }
     if (r === "receptionist") {
       return [
         { href: "/",             label: t("dashboard"),       icon: LayoutDashboard, badge: 0,            badgeVariant: "red"   as const },
@@ -97,19 +116,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         { href: "/map",           label: t("findNearby"),      icon: Map,             badge: 0,                    badgeVariant: "red"   as const },
       ];
     }
+    if (r === "pharmacy" || r === "pharmacist") {
+      return [
+        { href: "/",              label: t("dashboard"), icon: LayoutDashboard, badge: 0,                 badgeVariant: "red"   as const },
+        { href: "/prescriptions", label: t("pendingRx"), icon: Pill,            badge: badges.prescriptions, badgeVariant: "amber" as const },
+        { href: "/stock",         label: t("stock"),     icon: Package,         badge: badges.stock,     badgeVariant: "red"   as const },
+      ];
+    }
     return [
-      { href: "/",              label: t("dashboard"), icon: LayoutDashboard, badge: 0,                 badgeVariant: "red"   as const },
-      { href: "/prescriptions", label: t("pendingRx"), icon: Pill,            badge: badges.prescriptions, badgeVariant: "amber" as const },
-      { href: "/stock",         label: t("stock"),     icon: Package,         badge: badges.stock,     badgeVariant: "red"   as const },
+      { href: "/", label: t("dashboard"), icon: LayoutDashboard, badge: 0, badgeVariant: "red" as const },
     ];
   }
 
   const items = navItems(role);
   const totalAlerts = badges.prescriptions + badges.stock;
 
+  const handleLogout = () => signOut({ redirectUrl: `${import.meta.env.BASE_URL}sign-in` });
+
   const SidebarContent = () => (
     <>
-      {/* Logo */}
       <div className={cn("flex items-center gap-2.5 px-5 h-16 border-b border-border shrink-0", isRTL && "flex-row-reverse")}>
         <div className="relative shrink-0">
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center overflow-hidden">
@@ -126,18 +151,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <span className="font-bold text-lg tracking-tight text-sidebar-foreground">{clinicName}</span>
       </div>
 
-      {/* Role badge — read-only, reflects login role */}
       <div className="px-3 pt-3 pb-1">
         <div className={cn(
           "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium",
-          ROLE_BADGE[role], isRTL && "flex-row-reverse"
+          ROLE_BADGE[role] ?? "bg-slate-100 text-slate-600", isRTL && "flex-row-reverse"
         )}>
-          <span className={cn("w-2 h-2 rounded-full shrink-0", ROLE_DOT[role])} />
-          {ROLE_LABELS[role]}
+          <span className={cn("w-2 h-2 rounded-full shrink-0", ROLE_DOT[role] ?? "bg-slate-400")} />
+          {ROLE_LABELS[role] ?? role}
         </div>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
         {items.map(({ href, label, icon: Icon, badge, badgeVariant }) => {
           const active = href === "/" ? location === "/" : location.startsWith(href);
@@ -161,13 +184,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         })}
       </nav>
 
-      {/* Bottom: user + actions */}
       <div className="px-3 pb-3 pt-2 space-y-1 border-t border-border">
         {user && (
           <div className={cn("flex items-center gap-2 px-2 py-2 rounded-lg bg-muted/30 mb-1", isRTL && "flex-row-reverse")}>
             <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 relative">
               <User className="w-3.5 h-3.5 text-primary" />
-              <span className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-sidebar", ROLE_DOT[role])} />
+              <span className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-sidebar", ROLE_DOT[role] ?? "bg-slate-400")} />
             </div>
             <div className={cn("flex-1 min-w-0", isRTL && "text-right")}>
               <p className="text-xs font-semibold truncate text-sidebar-foreground">{user.name}</p>
@@ -188,7 +210,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </button>
 
         <button
-          onClick={logout}
+          onClick={handleLogout}
           className={cn(
             "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors",
             isRTL && "flex-row-reverse"
@@ -207,13 +229,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={cn("flex h-screen overflow-hidden bg-background", isRTL && "font-arabic")} dir={isRTL ? "rtl" : "ltr"}>
-      {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col w-64 border-r border-border bg-sidebar shrink-0">
         <SidebarContent />
       </aside>
 
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        {/* Mobile header */}
         <header className="h-14 border-b border-border bg-background flex items-center justify-between px-4 shrink-0 md:hidden">
           <div className={cn("flex items-center gap-2", isRTL && "flex-row-reverse")}>
             <div className="relative">
@@ -230,13 +250,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Button variant="ghost" size="sm" onClick={() => setLang(lang === "en" ? "ar" : "en")} className="text-xs px-2">
               {lang === "en" ? "ع" : "EN"}
             </Button>
-            <Button variant="outline" size="sm" onClick={logout} className="gap-1 text-xs">
+            <Button variant="outline" size="sm" onClick={handleLogout} className="gap-1 text-xs">
               <LogOut className="w-3.5 h-3.5" />
             </Button>
           </div>
         </header>
 
-        {/* Mobile nav tabs */}
         <div className="md:hidden border-b border-border bg-background overflow-x-auto">
           <nav className="flex px-2 py-1.5 gap-0.5">
             {items.map(({ href, label, icon: Icon, badge, badgeVariant }) => {

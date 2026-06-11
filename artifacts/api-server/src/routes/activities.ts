@@ -52,7 +52,7 @@ router.get("/activities/catalogue", requireAuth, async (req, res): Promise<void>
 // ── List activities for an encounter ─────────────────────────────────────────
 router.get("/consultations/:id/activities", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  const consultationId = parseInt(req.params.id);
+  const consultationId = parseInt(String(req.params.id));
 
   const [consultation] = await db
     .select()
@@ -84,7 +84,7 @@ router.post("/consultations/:id/activities", requireAuth, async (req, res): Prom
     res.status(403).json({ error: "Only doctors can add activities" }); return;
   }
 
-  const consultationId = parseInt(req.params.id);
+  const consultationId = parseInt(String(req.params.id));
   const [consultation] = await db
     .select()
     .from(consultationsTable)
@@ -133,7 +133,7 @@ router.patch("/activities/:id", requireAuth, async (req, res): Promise<void> => 
     res.status(403).json({ error: "Only doctors can modify activities" }); return;
   }
 
-  const activityId = parseInt(req.params.id);
+  const activityId = parseInt(String(req.params.id));
   const [activity] = await db
     .select()
     .from(encounterActivitiesTable)
@@ -172,7 +172,7 @@ router.delete("/activities/:id", requireAuth, async (req, res): Promise<void> =>
     res.status(403).json({ error: "Only doctors can remove activities" }); return;
   }
 
-  const activityId = parseInt(req.params.id);
+  const activityId = parseInt(String(req.params.id));
   const [activity] = await db
     .select()
     .from(encounterActivitiesTable)

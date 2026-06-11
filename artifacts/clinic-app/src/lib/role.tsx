@@ -1,15 +1,14 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
+import { useAuth, type AppRole } from "./auth";
 
-export type Role = "doctor" | "patient" | "pharmacy" | "receptionist";
+export type Role = AppRole;
 
-const RoleContext = createContext<{
-  role: Role;
-  setRole: (r: Role) => void;
-}>({ role: "doctor", setRole: () => {} });
+const RoleContext = createContext<{ role: Role }>({ role: "pending" });
 
-export function RoleProvider({ children, initialRole }: { children: ReactNode; initialRole?: Role }) {
-  const [role, setRole] = useState<Role>(initialRole ?? "doctor");
-  return <RoleContext.Provider value={{ role, setRole }}>{children}</RoleContext.Provider>;
+export function RoleProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const role: Role = user?.role ?? "pending";
+  return <RoleContext.Provider value={{ role }}>{children}</RoleContext.Provider>;
 }
 
 export function useRole() {

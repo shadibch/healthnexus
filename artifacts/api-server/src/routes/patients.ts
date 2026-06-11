@@ -212,7 +212,7 @@ router.get("/patients/:id/history", requireAuth, async (req, res): Promise<void>
 // Last 3 encounters for a patient — any doctor can read (read-only clinical history)
 router.get("/patients/:id/encounters", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  const patientId = parseInt(req.params.id);
+  const patientId = parseInt(String(req.params.id));
   if (isNaN(patientId)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   // Patient can only see their own encounters

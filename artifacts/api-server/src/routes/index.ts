@@ -16,11 +16,14 @@ import billingRouter from "./billing";
 import mapRouter from "./map";
 import reportsRouter from "./reports";
 import settingsRouter from "./settings";
+import usersRouter from "./users";
+import aiAssistantRouter from "./ai-assistant";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
+router.use(usersRouter);
 router.use(patientsRouter);
 router.use(doctorsRouter);
 router.use(appointmentsRouter);
@@ -36,5 +39,6 @@ router.use(billingRouter);
 router.use(mapRouter);
 router.use(reportsRouter);
 router.use(settingsRouter);
+router.use(aiAssistantRouter);
 
 export default router;

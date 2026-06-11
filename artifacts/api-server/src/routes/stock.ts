@@ -85,7 +85,7 @@ router.post("/stock", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [stock] = await db.insert(stockTable).values(parsed.data).returning();
+  const [stock] = await db.insert(stockTable).values(parsed.data as any).returning();
   const [med] = await db.select().from(medicationsTable).where(eq(medicationsTable.id, stock.medicationId));
   res.status(201).json({ ...stock, medicationName: med?.name ?? null, isLowStock: isLowStock(stock) });
 });
@@ -103,7 +103,7 @@ router.patch("/stock/:id", async (req, res): Promise<void> => {
   }
   const [stock] = await db
     .update(stockTable)
-    .set(parsed.data)
+    .set(parsed.data as any)
     .where(eq(stockTable.id, params.data.id))
     .returning();
   if (!stock) {

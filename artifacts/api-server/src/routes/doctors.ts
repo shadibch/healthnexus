@@ -39,7 +39,7 @@ router.post("/doctors", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [doctor] = await db.insert(doctorsTable).values(parsed.data).returning();
+  const [doctor] = await db.insert(doctorsTable).values(parsed.data as any).returning();
   res.status(201).json(doctor);
 });
 
@@ -70,7 +70,7 @@ router.patch("/doctors/:id", async (req, res): Promise<void> => {
   }
   const [doctor] = await db
     .update(doctorsTable)
-    .set(parsed.data)
+    .set(parsed.data as any)
     .where(eq(doctorsTable.id, params.data.id))
     .returning();
   if (!doctor) {
