@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runStartupSeed } from "./seed";
+import { startBackupScheduler } from "./lib/backup";
 
 const rawPort = process.env["PORT"];
 
@@ -28,5 +29,11 @@ app.listen(port, async (err) => {
     await runStartupSeed();
   } catch (seedErr) {
     logger.error({ err: seedErr }, "Startup seed failed — server continues");
+  }
+
+  try {
+    await startBackupScheduler();
+  } catch (schedErr) {
+    logger.error({ err: schedErr }, "Backup scheduler failed to start — server continues");
   }
 });

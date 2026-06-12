@@ -18,6 +18,7 @@ import reportsRouter from "./reports";
 import settingsRouter from "./settings";
 import usersRouter from "./users";
 import aiAssistantRouter from "./ai-assistant";
+import backupsRouter from "./backups";
 
 const router: IRouter = Router();
 
@@ -40,5 +41,6 @@ router.use(mapRouter);
 router.use(reportsRouter);
 router.use(settingsRouter);
 router.use(aiAssistantRouter);
+router.use(backupsRouter);
 
 export default router;
