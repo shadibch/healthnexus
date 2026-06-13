@@ -61,10 +61,10 @@ router.get("/consultations/:id/activities", requireAuth, async (req, res): Promi
     .limit(1);
 
   if (!consultation) { res.status(404).json({ error: "Encounter not found" }); return; }
-  if (session.role === "doctor" && session.doctorDbId !== consultation.doctorId) {
+  if (session.roles.includes("doctor") && session.doctorDbId !== consultation.doctorId) {
     res.status(403).json({ error: "Access denied" }); return;
   }
-  if (session.role === "patient" && session.patientDbId !== consultation.patientId) {
+  if (session.roles.includes("patient") && session.patientDbId !== consultation.patientId) {
     res.status(403).json({ error: "Access denied" }); return;
   }
 
@@ -80,7 +80,7 @@ router.get("/consultations/:id/activities", requireAuth, async (req, res): Promi
 // ── Add an activity to an encounter ──────────────────────────────────────────
 router.post("/consultations/:id/activities", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "doctor") {
+  if (!session.roles.includes("doctor")) {
     res.status(403).json({ error: "Only doctors can add activities" }); return;
   }
 
@@ -129,7 +129,7 @@ router.post("/consultations/:id/activities", requireAuth, async (req, res): Prom
 // ── Update activity quantity ──────────────────────────────────────────────────
 router.patch("/activities/:id", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "doctor") {
+  if (!session.roles.includes("doctor")) {
     res.status(403).json({ error: "Only doctors can modify activities" }); return;
   }
 
@@ -168,7 +168,7 @@ router.patch("/activities/:id", requireAuth, async (req, res): Promise<void> => 
 // ── Remove an activity ────────────────────────────────────────────────────────
 router.delete("/activities/:id", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "doctor") {
+  if (!session.roles.includes("doctor")) {
     res.status(403).json({ error: "Only doctors can remove activities" }); return;
   }
 

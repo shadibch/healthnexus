@@ -26,6 +26,13 @@ const LONG_TERM_CONDITIONS = [
   "HIV/AIDS", "Sickle cell disease",
 ];
 
+// Staff roles that can be combined freely
+const EXTRA_STAFF_ROLES: Array<{ id: string; en: string; ar: string; desc: string }> = [
+  { id: "doctor",       en: "Doctor",        ar: "طبيب",          desc: "See patients, write consultations & prescriptions" },
+  { id: "receptionist", en: "Receptionist",  ar: "موظف استقبال",  desc: "Manage appointments, queue & patient check-in" },
+  { id: "pharmacist",   en: "Pharmacist",    ar: "صيدلاني",       desc: "Dispense medications and manage pharmacy stock" },
+];
+
 type Step = "role" | "admin-center" | "patient-profile";
 
 export default function OnboardingPage() {
@@ -38,12 +45,18 @@ export default function OnboardingPage() {
     : "role";
 
   const [step, setStep] = useState<Step>(initialStep);
-  const [selectedRole, setSelectedRole] = useState<"admin" | "patient" | null>(null);
-  const [adminIsDoctor, setAdminIsDoctor] = useState(true);
 
+  // ── Role selection ─────────────────────────────────────────────────────────
+  // "staff" = picked the admin/medical center card; "patient" = patient card
+  const [roleMode, setRoleMode] = useState<"staff" | "patient" | null>(null);
+  // Extra staff roles (admin is always included in "staff" mode)
+  const [extraRoles, setExtraRoles] = useState<Set<string>>(new Set(["doctor"])); // doctor ticked by default
+
+  // ── Admin center form ──────────────────────────────────────────────────────
   const [centerName, setCenterName] = useState("");
   const [centerAddress, setCenterAddress] = useState("");
 
+  // ── Patient form ───────────────────────────────────────────────────────────
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [dob, setDob] = useState("");
@@ -54,17 +67,23 @@ export default function OnboardingPage() {
   const [medications, setMedications] = useState<string[]>([""]);
   const [hasMedications, setHasMedications] = useState(false);
 
+  // ── Mutations ──────────────────────────────────────────────────────────────
   const roleMutation = useMutation({
-    mutationFn: (role: "admin" | "patient") =>
-      apiFetch("/users/onboarding/role", { method: "POST", body: JSON.stringify({ role }) }),
-    onSuccess: (_, role) => {
+    mutationFn: (roles: string[]) =>
+      apiFetch("/users/onboarding/role", { method: "POST", body: JSON.stringify({ roles }) }),
+    onSuccess: (_, roles) => {
       qc.invalidateQueries({ queryKey: ["auth-me"] });
-      setStep(role === "admin" ? "admin-center" : "patient-profile");
+      if (roles.includes("admin")) {
+        setStep("admin-center");
+      } else if (roles.includes("patient")) {
+        setStep("patient-profile");
+      }
+      // non-admin staff who joined via invite → onboarding complete handled server-side
     },
   });
 
   const adminMutation = useMutation({
-    mutationFn: (data: { centerName: string; address?: string; adminIsDoctor: boolean }) =>
+    mutationFn: (data: { centerName: string; address?: string }) =>
       apiFetch("/users/onboarding/admin", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["auth-me"] }),
   });
@@ -75,21 +94,29 @@ export default function OnboardingPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["auth-me"] }),
   });
 
-  function toggleAllergy(allergy: string) {
-    setSelectedAllergies(prev =>
-      prev.includes(allergy) ? prev.filter(a => a !== allergy) : [...prev, allergy]
-    );
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function toggleExtraRole(id: string) {
+    setExtraRoles(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   }
 
-  function toggleCondition(condition: string) {
-    setSelectedConditions(prev =>
-      prev.includes(condition) ? prev.filter(c => c !== condition) : [...prev, condition]
-    );
+  function handleRoleContinue() {
+    if (!roleMode) return;
+    if (roleMode === "patient") {
+      roleMutation.mutate(["patient"]);
+    } else {
+      // staff mode: admin + selected extras
+      const roles = ["admin", ...Array.from(extraRoles)];
+      roleMutation.mutate(roles);
+    }
   }
 
   function handleSubmitAdmin() {
     if (!centerName.trim()) return;
-    adminMutation.mutate({ centerName: centerName.trim(), address: centerAddress || undefined, adminIsDoctor });
+    adminMutation.mutate({ centerName: centerName.trim(), address: centerAddress || undefined });
   }
 
   function handleSubmitPatient() {
@@ -109,6 +136,13 @@ export default function OnboardingPage() {
     });
   }
 
+  function toggleAllergy(a: string) {
+    setSelectedAllergies(prev => prev.includes(a) ? prev.filter(x => x !== a) : [...prev, a]);
+  }
+  function toggleCondition(c: string) {
+    setSelectedConditions(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
@@ -119,6 +153,7 @@ export default function OnboardingPage() {
           <span className="text-2xl font-bold text-slate-800">HealthNexus</span>
         </div>
 
+        {/* ── Step 1: Role selection ── */}
         {step === "role" && (
           <Card className="shadow-lg">
             <CardHeader className="text-center pb-2">
@@ -126,11 +161,13 @@ export default function OnboardingPage() {
               <CardDescription>Choose how you'll be using HealthNexus</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
+
+              {/* ── Medical center / staff card ── */}
               <div
-                onClick={() => setSelectedRole("admin")}
+                onClick={() => setRoleMode("staff")}
                 className={cn(
                   "w-full rounded-xl border-2 text-left transition-all cursor-pointer",
-                  selectedRole === "admin"
+                  roleMode === "staff"
                     ? "border-emerald-500 bg-emerald-50"
                     : "border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50"
                 )}
@@ -141,39 +178,51 @@ export default function OnboardingPage() {
                   </div>
                   <div>
                     <p className="font-semibold text-slate-800">Medical Center Admin</p>
-                    <p className="text-sm text-slate-500 mt-1">Manage a clinic or hospital. Add doctors, pharmacists, and receptionists to your center.</p>
+                    <p className="text-sm text-slate-500 mt-1">
+                      Set up and manage your clinic. Invite doctors, pharmacists, and receptionists.
+                    </p>
                   </div>
                 </div>
 
-                {/* "Admin is also a doctor" — shown when admin card is selected */}
-                {selectedRole === "admin" && (
+                {/* Extra roles — only visible when staff card is selected */}
+                {roleMode === "staff" && (
                   <div
                     onClick={e => e.stopPropagation()}
-                    className="mx-5 mb-4 flex items-start gap-3 rounded-lg border border-emerald-200 bg-white px-4 py-3"
+                    className="mx-5 mb-4 rounded-lg border border-emerald-200 bg-white divide-y divide-emerald-100"
                   >
-                    <Checkbox
-                      id="adminIsDoctor"
-                      checked={adminIsDoctor}
-                      onCheckedChange={(v) => setAdminIsDoctor(!!v)}
-                      className="mt-0.5 shrink-0"
-                    />
-                    <label htmlFor="adminIsDoctor" className="cursor-pointer select-none" onClick={e => e.stopPropagation()}>
-                      <span className="block text-sm font-medium text-slate-800">
-                        Admin is also a doctor
-                      </span>
-                      <span className="block text-sm font-medium text-slate-600 mt-0.5" dir="rtl">
-                        المشرف طبيب أيضاً
-                      </span>
-                    </label>
+                    <p className="px-4 py-2 text-xs font-semibold text-emerald-700 uppercase tracking-wide">
+                      Also wear these hats? / هل تؤدي أدواراً إضافية؟
+                    </p>
+                    {EXTRA_STAFF_ROLES.map(r => (
+                      <label
+                        key={r.id}
+                        className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-emerald-50/50 transition-colors"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={extraRoles.has(r.id)}
+                          onCheckedChange={() => toggleExtraRole(r.id)}
+                          className="mt-0.5 shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-sm font-medium text-slate-800">{r.en}</span>
+                            <span className="text-sm text-slate-500" dir="rtl">{r.ar}</span>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5">{r.desc}</p>
+                        </div>
+                      </label>
+                    ))}
                   </div>
                 )}
               </div>
 
+              {/* ── Patient card ── */}
               <button
-                onClick={() => setSelectedRole("patient")}
+                onClick={() => setRoleMode("patient")}
                 className={cn(
                   "w-full p-5 rounded-xl border-2 text-left transition-all",
-                  selectedRole === "patient"
+                  roleMode === "patient"
                     ? "border-blue-500 bg-blue-50"
                     : "border-slate-200 hover:border-blue-300 hover:bg-blue-50/50"
                 )}
@@ -191,8 +240,8 @@ export default function OnboardingPage() {
 
               <Button
                 className="w-full mt-2"
-                disabled={!selectedRole || roleMutation.isPending}
-                onClick={() => selectedRole && roleMutation.mutate(selectedRole)}
+                disabled={!roleMode || roleMutation.isPending}
+                onClick={handleRoleContinue}
               >
                 {roleMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                 Continue <ChevronRight className="w-4 h-4 ml-1" />
@@ -208,6 +257,7 @@ export default function OnboardingPage() {
           </Card>
         )}
 
+        {/* ── Step 2a: Admin center setup ── */}
         {step === "admin-center" && (
           <Card className="shadow-lg">
             <CardHeader className="pb-2">
@@ -256,6 +306,7 @@ export default function OnboardingPage() {
           </Card>
         )}
 
+        {/* ── Step 2b: Patient profile ── */}
         {step === "patient-profile" && (
           <Card className="shadow-lg">
             <CardHeader className="pb-2">
@@ -307,10 +358,7 @@ export default function OnboardingPage() {
                 <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
                   {ALLERGIES.map(allergy => (
                     <label key={allergy} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-1.5 rounded">
-                      <Checkbox
-                        checked={selectedAllergies.includes(allergy)}
-                        onCheckedChange={() => toggleAllergy(allergy)}
-                      />
+                      <Checkbox checked={selectedAllergies.includes(allergy)} onCheckedChange={() => toggleAllergy(allergy)} />
                       <span className="text-sm">{allergy}</span>
                     </label>
                   ))}
@@ -323,10 +371,7 @@ export default function OnboardingPage() {
                 <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
                   {LONG_TERM_CONDITIONS.map(condition => (
                     <label key={condition} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-1.5 rounded">
-                      <Checkbox
-                        checked={selectedConditions.includes(condition)}
-                        onCheckedChange={() => toggleCondition(condition)}
-                      />
+                      <Checkbox checked={selectedConditions.includes(condition)} onCheckedChange={() => toggleCondition(condition)} />
                       <span className="text-sm">{condition}</span>
                     </label>
                   ))}
@@ -335,11 +380,7 @@ export default function OnboardingPage() {
 
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <Checkbox
-                    id="hasMeds"
-                    checked={hasMedications}
-                    onCheckedChange={(v) => setHasMedications(!!v)}
-                  />
+                  <Checkbox id="hasMeds" checked={hasMedications} onCheckedChange={(v) => setHasMedications(!!v)} />
                   <Label htmlFor="hasMeds" className="text-base font-semibold cursor-pointer">
                     I am currently taking medications
                   </Label>
@@ -358,22 +399,13 @@ export default function OnboardingPage() {
                           placeholder={`Medication ${idx + 1} (e.g. Metformin 500mg)`}
                         />
                         {medications.length > 1 && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setMedications(medications.filter((_, i) => i !== idx))}
-                          >
+                          <Button variant="ghost" size="icon" onClick={() => setMedications(medications.filter((_, i) => i !== idx))}>
                             <Trash2 className="w-4 h-4 text-destructive" />
                           </Button>
                         )}
                       </div>
                     ))}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setMedications([...medications, ""])}
-                      className="gap-1"
-                    >
+                    <Button variant="outline" size="sm" onClick={() => setMedications([...medications, ""])} className="gap-1">
                       <Plus className="w-3.5 h-3.5" /> Add another
                     </Button>
                   </div>

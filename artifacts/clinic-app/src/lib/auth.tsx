@@ -8,7 +8,10 @@ export type AppRole = "admin" | "doctor" | "patient" | "pharmacist" | "pharmacy"
 export interface AuthUser {
   userId: number;
   clerkId: string;
+  /** Primary (highest-priority) role — for display */
   role: AppRole;
+  /** All roles this user holds */
+  roles: AppRole[];
   name: string;
   email: string;
   onboardingComplete: boolean;

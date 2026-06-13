@@ -35,9 +35,9 @@ router.get("/consultations", requireAuth, async (req, res): Promise<void> => {
   let all = await db.select().from(consultationsTable).orderBy(desc(consultationsTable.createdAt));
 
   // Role-based isolation
-  if (session.role === "doctor" && session.doctorDbId != null) {
+  if (session.roles.includes("doctor") && session.doctorDbId != null) {
     all = all.filter((c) => c.doctorId === session.doctorDbId);
-  } else if (session.role === "patient" && session.patientDbId != null) {
+  } else if (session.roles.includes("patient") && session.patientDbId != null) {
     all = all.filter((c) => c.patientId === session.patientDbId);
   }
 
@@ -65,7 +65,7 @@ router.get("/consultations", requireAuth, async (req, res): Promise<void> => {
 // Create consultation/encounter with 7-day follow-up detection
 router.post("/consultations", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "doctor") {
+  if (!session.roles.includes("doctor")) {
     res.status(403).json({ error: "Only doctors can create consultations" });
     return;
   }
@@ -162,7 +162,7 @@ router.get("/consultations/:id", requireAuth, async (req, res): Promise<void> =>
   }
 
   // Patients can only see their own consultations
-  if (session.role === "patient" && session.patientDbId !== consultation.patientId) {
+  if (session.roles.includes("patient") && session.patientDbId !== consultation.patientId) {
     res.status(403).json({ error: "Not your consultation" });
     return;
   }
@@ -186,7 +186,7 @@ router.get("/consultations/:id", requireAuth, async (req, res): Promise<void> =>
 
 router.patch("/consultations/:id", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "doctor") {
+  if (!session.roles.includes("doctor")) {
     res.status(403).json({ error: "Only doctors can update consultations" });
     return;
   }
@@ -234,7 +234,7 @@ router.get("/consultations/:id/orders", requireAuth, async (req, res): Promise<v
 
 router.post("/consultations/:id/orders", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "doctor") {
+  if (!session.roles.includes("doctor")) {
     res.status(403).json({ error: "Only doctors can create medical orders" });
     return;
   }

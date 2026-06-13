@@ -13,10 +13,31 @@ export type AppRole =
   | "receptionist"
   | "pending";
 
+// Priority order for selecting the "primary" display role
+const ROLE_PRIORITY: Record<string, number> = {
+  admin:        6,
+  doctor:       5,
+  receptionist: 4,
+  pharmacist:   3,
+  pharmacy:     2,
+  patient:      1,
+  pending:      0,
+};
+
+export function primaryRole(roles: string[]): AppRole {
+  if (roles.length === 0) return "pending";
+  return roles.reduce((best, r) =>
+    (ROLE_PRIORITY[r] ?? 0) > (ROLE_PRIORITY[best] ?? 0) ? r : best
+  ) as AppRole;
+}
+
 export interface SessionUser {
   userId: number;
   clerkId: string;
+  /** Highest-priority role — used for display and backward-compatible single-role checks */
   role: AppRole;
+  /** Full set of roles this user holds */
+  roles: AppRole[];
   name: string;
   email: string;
   onboardingComplete: boolean;
@@ -57,13 +78,17 @@ export async function attachSessionUser(
           })
         : null;
 
+      const assignedRole = invite ? invite.role : "pending";
+      const assignedRoles: string[] = invite ? [invite.role] : [];
+
       const [created] = await db
         .insert(usersTable)
         .values({
           clerkId: auth.userId,
           email,
           name,
-          role: invite ? invite.role : "pending",
+          role: assignedRole,
+          roles: assignedRoles,
           medicalCenterId: invite ? invite.medicalCenterId : null,
           onboardingComplete: false,
         })
@@ -78,17 +103,24 @@ export async function attachSessionUser(
       }
     }
 
+    // Resolve roles — DB may have roles array populated or fall back to role field
+    const dbRoles: string[] = Array.isArray(user.roles) && user.roles.length > 0
+      ? user.roles
+      : user.role !== "pending" ? [user.role] : [];
+
+    const computedPrimary = primaryRole(dbRoles);
+
     let doctorDbId: number | null = null;
     let patientDbId: number | null = null;
 
-    if (user.role === "doctor") {
+    if (dbRoles.includes("doctor")) {
       const doctor = await db.query.doctorsTable.findFirst({
         where: eq(doctorsTable.userId, user.id),
       });
       doctorDbId = doctor?.id ?? null;
     }
 
-    if (user.role === "patient") {
+    if (dbRoles.includes("patient")) {
       const patient = await db.query.patientsTable.findFirst({
         where: eq(patientsTable.userId, user.id),
       });
@@ -98,7 +130,8 @@ export async function attachSessionUser(
     (req as any).sessionUser = {
       userId: user.id,
       clerkId: user.clerkId,
-      role: user.role as AppRole,
+      role: computedPrimary,
+      roles: dbRoles as AppRole[],
       name: user.name ?? "",
       email: user.email,
       onboardingComplete: user.onboardingComplete,
@@ -128,6 +161,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   next();
 }
 
+/** Passes if the user holds ANY of the listed roles */
 export function requireRole(...roles: AppRole[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const user = getSessionUser(req);
@@ -135,7 +169,7 @@ export function requireRole(...roles: AppRole[]) {
       res.status(401).json({ error: "Authentication required" });
       return;
     }
-    if (!roles.includes(user.role)) {
+    if (!roles.some(r => user.roles.includes(r))) {
       res.status(403).json({ error: "Insufficient permissions" });
       return;
     }

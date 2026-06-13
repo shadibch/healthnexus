@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { useRole, type Role } from "@/lib/role";
+import { useRole } from "@/lib/role";
 import { useAuth } from "@/lib/auth";
 import { useClerk } from "@clerk/react";
 import { useI18n } from "@/lib/i18n";
@@ -25,6 +25,16 @@ import {
 } from "lucide-react";
 import { useClinicSettings } from "@/lib/clinic-settings";
 import { Button } from "@/components/ui/button";
+import type { AppRole } from "@/lib/auth";
+import type { LucideIcon } from "lucide-react";
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  badge: number;
+  badgeVariant: "red" | "amber";
+};
 
 const ROLE_DOT: Record<string, string> = {
   doctor:       "bg-emerald-500",
@@ -58,8 +68,79 @@ function NavBadge({ count, variant = "red" }: { count: number; variant?: "red" |
   );
 }
 
+// Build the unified nav from all roles — deduped, in logical order
+function buildNav(
+  roles: AppRole[],
+  opts: {
+    t: (k: string) => string;
+    lang: string;
+    badges: { queue: number; prescriptions: number; stock: number };
+  },
+): NavItem[] {
+  const { t, lang, badges } = opts;
+  const has = (...rs: string[]) => rs.some(r => roles.includes(r as AppRole));
+
+  const seen = new Set<string>();
+  const items: NavItem[] = [];
+  const add = (item: NavItem) => {
+    if (!seen.has(item.href)) {
+      seen.add(item.href);
+      items.push(item);
+    }
+  };
+
+  // ── Dashboard (always) ─────────────────────────────────────────────────────
+  add({ href: "/", label: t("dashboard"), icon: LayoutDashboard, badge: 0, badgeVariant: "red" });
+
+  // ── Admin panel ────────────────────────────────────────────────────────────
+  if (has("admin")) {
+    add({ href: "/admin", label: lang === "ar" ? "إدارة الموظفين" : "Staff & Admin", icon: Building2, badge: 0, badgeVariant: "red" });
+  }
+
+  // ── Clinical staff (doctor + receptionist) ─────────────────────────────────
+  if (has("doctor", "receptionist")) {
+    add({ href: "/patients",     label: t("patients"),     icon: Users,        badge: 0,            badgeVariant: "red"   });
+    add({ href: "/queue",        label: t("todaysQueue"),  icon: CalendarClock, badge: badges.queue, badgeVariant: "amber" });
+    add({ href: "/appointments", label: t("appointments"), icon: CalendarClock, badge: 0,            badgeVariant: "red"   });
+  }
+
+  // ── Doctor-specific ────────────────────────────────────────────────────────
+  if (has("doctor")) {
+    add({ href: "/consultations", label: t("consultations"),                                    icon: Stethoscope, badge: 0,                    badgeVariant: "red"   });
+    add({ href: "/prescriptions", label: t("prescriptions"),                                    icon: FileText,    badge: badges.prescriptions, badgeVariant: "amber" });
+    add({ href: "/medications",   label: t("medications"),                                      icon: FlaskConical, badge: 0,                   badgeVariant: "red"   });
+    add({ href: "/billing",       label: t("billing"),                                          icon: ShieldCheck, badge: 0,                    badgeVariant: "red"   });
+    add({ href: "/reports",       label: lang === "ar" ? "التقارير" : "Reports",               icon: BarChart2,   badge: 0,                    badgeVariant: "red"   });
+  }
+
+  // ── Receptionist-specific (billing if not already added by doctor) ─────────
+  if (has("receptionist") && !has("doctor")) {
+    add({ href: "/billing", label: t("billing"), icon: ShieldCheck, badge: 0, badgeVariant: "red" });
+  }
+
+  // ── Pharmacy ───────────────────────────────────────────────────────────────
+  if (has("pharmacy", "pharmacist")) {
+    add({ href: "/prescriptions", label: t("pendingRx"), icon: Pill,    badge: badges.prescriptions, badgeVariant: "amber" });
+    add({ href: "/stock",         label: t("stock"),     icon: Package, badge: badges.stock,         badgeVariant: "red"   });
+  }
+
+  // ── Patient ────────────────────────────────────────────────────────────────
+  if (has("patient")) {
+    add({ href: "/appointments",  label: t("myAppointments"),  icon: CalendarClock, badge: 0,                    badgeVariant: "red"   });
+    add({ href: "/prescriptions", label: t("myPrescriptions"), icon: FileText,      badge: badges.prescriptions, badgeVariant: "amber" });
+    add({ href: "/map",           label: t("findNearby"),      icon: Map,           badge: 0,                    badgeVariant: "red"   });
+  }
+
+  // ── Settings (staff only) ──────────────────────────────────────────────────
+  if (has("admin", "doctor", "receptionist", "pharmacist", "pharmacy")) {
+    add({ href: "/settings", label: lang === "ar" ? "الإعدادات" : "Settings", icon: Settings, badge: 0, badgeVariant: "red" });
+  }
+
+  return items;
+}
+
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const { role } = useRole();
+  const { role, roles } = useRole();
   const { user } = useAuth();
   const { signOut } = useClerk();
   const { t, lang, setLang, isRTL } = useI18n();
@@ -77,61 +158,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     pending:      lang === "ar" ? "جاري الإعداد" : "Setting up...",
   };
 
-  function navItems(r: string) {
-    if (r === "admin") {
-      return [
-        { href: "/",       label: lang === "ar" ? "لوحة التحكم" : "Dashboard",  icon: Building2,       badge: 0, badgeVariant: "red" as const },
-        { href: "/admin",  label: lang === "ar" ? "إدارة الموظفين" : "Staff",   icon: Users,           badge: 0, badgeVariant: "red" as const },
-        { href: "/settings", label: lang === "ar" ? "الإعدادات" : "Settings",   icon: Settings,        badge: 0, badgeVariant: "red" as const },
-      ];
-    }
-    if (r === "receptionist") {
-      return [
-        { href: "/",             label: t("dashboard"),       icon: LayoutDashboard, badge: 0,            badgeVariant: "red"   as const },
-        { href: "/patients",     label: t("patients"),        icon: Users,           badge: 0,            badgeVariant: "red"   as const },
-        { href: "/appointments", label: t("appointments"),    icon: CalendarClock,   badge: badges.queue, badgeVariant: "amber" as const },
-        { href: "/queue",        label: t("todaysQueue"),     icon: FileText,        badge: badges.queue, badgeVariant: "amber" as const },
-        { href: "/billing",      label: t("billing"),         icon: ShieldCheck,     badge: 0,            badgeVariant: "red"   as const },
-        { href: "/settings",     label: lang === "ar" ? "الإعدادات" : "Settings", icon: Settings, badge: 0, badgeVariant: "red" as const },
-      ];
-    }
-    if (r === "doctor") {
-      return [
-        { href: "/",              label: t("dashboard"),    icon: LayoutDashboard, badge: 0,              badgeVariant: "red"   as const },
-        { href: "/patients",      label: t("patients"),     icon: Users,           badge: 0,              badgeVariant: "red"   as const },
-        { href: "/queue",         label: t("todaysQueue"),  icon: CalendarClock,   badge: badges.queue,   badgeVariant: "amber" as const },
-        { href: "/consultations", label: t("consultations"),icon: Stethoscope,     badge: 0,              badgeVariant: "red"   as const },
-        { href: "/prescriptions", label: t("prescriptions"),icon: FileText,        badge: badges.prescriptions, badgeVariant: "amber" as const },
-        { href: "/medications",   label: t("medications"),  icon: FlaskConical,    badge: 0,              badgeVariant: "red"   as const },
-        { href: "/billing",       label: t("billing"),      icon: ShieldCheck,     badge: 0,              badgeVariant: "red"   as const },
-        { href: "/reports",       label: lang === "ar" ? "التقارير" : "Reports",  icon: BarChart2,  badge: 0, badgeVariant: "red" as const },
-        { href: "/settings",      label: lang === "ar" ? "الإعدادات" : "Settings", icon: Settings, badge: 0, badgeVariant: "red" as const },
-      ];
-    }
-    if (r === "patient") {
-      return [
-        { href: "/",              label: t("dashboard"),       icon: LayoutDashboard, badge: 0,                    badgeVariant: "red"   as const },
-        { href: "/appointments",  label: t("myAppointments"),  icon: CalendarClock,   badge: 0,                    badgeVariant: "red"   as const },
-        { href: "/prescriptions", label: t("myPrescriptions"), icon: FileText,        badge: badges.prescriptions, badgeVariant: "amber" as const },
-        { href: "/map",           label: t("findNearby"),      icon: Map,             badge: 0,                    badgeVariant: "red"   as const },
-      ];
-    }
-    if (r === "pharmacy" || r === "pharmacist") {
-      return [
-        { href: "/",              label: t("dashboard"), icon: LayoutDashboard, badge: 0,                 badgeVariant: "red"   as const },
-        { href: "/prescriptions", label: t("pendingRx"), icon: Pill,            badge: badges.prescriptions, badgeVariant: "amber" as const },
-        { href: "/stock",         label: t("stock"),     icon: Package,         badge: badges.stock,     badgeVariant: "red"   as const },
-      ];
-    }
-    return [
-      { href: "/", label: t("dashboard"), icon: LayoutDashboard, badge: 0, badgeVariant: "red" as const },
-    ];
-  }
+  // Labels for additional roles shown in the sidebar
+  const ROLE_SHORT: Record<string, string> = {
+    admin:        lang === "ar" ? "مدير"    : "Admin",
+    doctor:       lang === "ar" ? "طبيب"    : "Doctor",
+    receptionist: lang === "ar" ? "استقبال" : "Reception",
+    pharmacist:   lang === "ar" ? "صيدلاني" : "Pharmacist",
+    pharmacy:     lang === "ar" ? "صيدلية"  : "Pharmacy",
+    patient:      lang === "ar" ? "مريض"    : "Patient",
+  };
 
-  const items = navItems(role);
+  const items = buildNav(roles, { t, lang, badges });
   const totalAlerts = badges.prescriptions + badges.stock;
 
   const handleLogout = () => signOut({ redirectUrl: `${import.meta.env.BASE_URL}sign-in` });
+
+  // Sidebar role pill — primary role + count of extras
+  const extraRoles = roles.filter(r => r !== role);
 
   const SidebarContent = () => (
     <>
@@ -151,7 +194,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <span className="font-bold text-lg tracking-tight text-sidebar-foreground">{clinicName}</span>
       </div>
 
-      <div className="px-3 pt-3 pb-1">
+      <div className="px-3 pt-3 pb-1 space-y-1">
+        {/* Primary role badge */}
         <div className={cn(
           "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium",
           ROLE_BADGE[role] ?? "bg-slate-100 text-slate-600", isRTL && "flex-row-reverse"
@@ -159,6 +203,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <span className={cn("w-2 h-2 rounded-full shrink-0", ROLE_DOT[role] ?? "bg-slate-400")} />
           {ROLE_LABELS[role] ?? role}
         </div>
+        {/* Extra role tags — shown if user has multiple roles */}
+        {extraRoles.length > 0 && (
+          <div className={cn("flex flex-wrap gap-1 px-3", isRTL && "flex-row-reverse")}>
+            {extraRoles.map(r => (
+              <span
+                key={r}
+                className={cn(
+                  "text-[10px] font-semibold px-2 py-0.5 rounded-full",
+                  ROLE_BADGE[r] ?? "bg-slate-100 text-slate-600"
+                )}
+              >
+                {ROLE_SHORT[r] ?? r}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">

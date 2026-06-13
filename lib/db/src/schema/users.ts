@@ -1,4 +1,5 @@
 import { pgTable, serial, text, timestamp, boolean, integer } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -8,6 +9,7 @@ export const usersTable = pgTable("users", {
   email: text("email").notNull(),
   name: text("name"),
   role: text("role").notNull().default("pending"),
+  roles: text("roles").array().notNull().default(sql`'{}'::text[]`),
   onboardingComplete: boolean("onboarding_complete").notNull().default(false),
   medicalCenterId: integer("medical_center_id"),
   subscriptionPlan: text("subscription_plan").notNull().default("free"),

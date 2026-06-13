@@ -27,11 +27,11 @@ router.get("/dashboard/stats", requireAuth, async (req, res): Promise<void> => {
   let monthConsultations = await db.select().from(consultationsTable).where(gte(consultationsTable.createdAt, monthStart));
 
   // Role-based isolation
-  if (session.role === "doctor" && session.doctorDbId != null) {
+  if (session.roles.includes("doctor") && session.doctorDbId != null) {
     todayAppointments = todayAppointments.filter((a) => a.doctorId === session.doctorDbId);
     allPrescriptions = allPrescriptions.filter((p) => p.doctorId === session.doctorDbId);
     monthConsultations = monthConsultations.filter((c) => c.doctorId === session.doctorDbId);
-  } else if (session.role === "patient" && session.patientDbId != null) {
+  } else if (session.roles.includes("patient") && session.patientDbId != null) {
     todayAppointments = todayAppointments.filter((a) => a.patientId === session.patientDbId);
     allPrescriptions = allPrescriptions.filter((p) => p.patientId === session.patientDbId);
     monthConsultations = monthConsultations.filter((c) => c.patientId === session.patientDbId);
@@ -53,7 +53,7 @@ router.get("/dashboard/stats", requireAuth, async (req, res): Promise<void> => {
 
   // Specialization stats — only relevant for doctor role dashboard
   let topSpecializations: { specialization: string; count: number; doctorCount: number }[] = [];
-  if (session.role === "doctor" || session.role === "pharmacy") {
+  if (session.roles.includes("doctor") || session.roles.includes("pharmacy")) {
     const specializationMap = new Map<string, number>();
     const specializationDoctorMap = new Map<string, Set<number>>();
     for (const doc of allDoctors) {
@@ -78,7 +78,7 @@ router.get("/dashboard/stats", requireAuth, async (req, res): Promise<void> => {
   }
 
   res.json({
-    totalPatients: session.role === "patient" ? 1 : allPatients.length,
+    totalPatients: session.roles.includes("patient") ? 1 : allPatients.length,
     totalDoctors: allDoctors.length,
     appointmentsToday: todayAppointments.length,
     appointmentsCompleted,
@@ -113,11 +113,11 @@ router.get("/dashboard/activity", requireAuth, async (req, res): Promise<void> =
   let prescriptions = allPrescriptions;
   let consultations = allConsultations;
 
-  if (session.role === "doctor" && session.doctorDbId != null) {
+  if (session.roles.includes("doctor") && session.doctorDbId != null) {
     appointments = appointments.filter((a) => a.doctorId === session.doctorDbId);
     prescriptions = prescriptions.filter((p) => p.doctorId === session.doctorDbId);
     consultations = consultations.filter((c) => c.doctorId === session.doctorDbId);
-  } else if (session.role === "patient" && session.patientDbId != null) {
+  } else if (session.roles.includes("patient") && session.patientDbId != null) {
     appointments = appointments.filter((a) => a.patientId === session.patientDbId);
     prescriptions = prescriptions.filter((p) => p.patientId === session.patientDbId);
     consultations = consultations.filter((c) => c.patientId === session.patientDbId);
@@ -132,7 +132,7 @@ router.get("/dashboard/activity", requireAuth, async (req, res): Promise<void> =
   };
   const activities: ActivityItem[] = [];
 
-  if (session.role !== "patient") {
+  if (!session.roles.includes("patient")) {
     for (const p of patients.slice(-5)) {
       activities.push({
         id: `patient-${p.id}`, type: "patient_registered",

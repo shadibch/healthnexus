@@ -18,7 +18,7 @@ router.get("/patients", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
 
   // Patients can only see their own record
-  if (session.role === "patient") {
+  if (session.roles.includes("patient")) {
     if (!session.patientDbId) { res.status(403).json({ error: "No patient record" }); return; }
     const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, session.patientDbId));
     res.json(patient ? [patient] : []);
@@ -55,7 +55,7 @@ router.get("/patients", requireAuth, async (req, res): Promise<void> => {
 
 router.post("/patients", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role === "patient") {
+  if (session.roles.includes("patient")) {
     res.status(403).json({ error: "Patients cannot register new patients" });
     return;
   }
@@ -76,7 +76,7 @@ router.get("/patients/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
   // Patient can only fetch their own record
-  if (session.role === "patient" && session.patientDbId !== params.data.id) {
+  if (session.roles.includes("patient") && session.patientDbId !== params.data.id) {
     res.status(403).json({ error: "Not your record" });
     return;
   }
@@ -90,7 +90,7 @@ router.get("/patients/:id", requireAuth, async (req, res): Promise<void> => {
 
 router.patch("/patients/:id", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role === "patient") {
+  if (session.roles.includes("patient")) {
     res.status(403).json({ error: "Patients cannot modify records directly" });
     return;
   }
@@ -118,7 +118,7 @@ router.patch("/patients/:id", requireAuth, async (req, res): Promise<void> => {
 
 router.delete("/patients/:id", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "doctor") {
+  if (!session.roles.includes("doctor")) {
     res.status(403).json({ error: "Only doctors can delete patient records" });
     return;
   }
@@ -145,7 +145,7 @@ router.get("/patients/:id/history", requireAuth, async (req, res): Promise<void>
   const patientId = params.data.id;
 
   // Patients can only see their own history
-  if (session.role === "patient" && session.patientDbId !== patientId) {
+  if (session.roles.includes("patient") && session.patientDbId !== patientId) {
     res.status(403).json({ error: "Not your record" });
     return;
   }
@@ -216,7 +216,7 @@ router.get("/patients/:id/encounters", requireAuth, async (req, res): Promise<vo
   if (isNaN(patientId)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   // Patient can only see their own encounters
-  if (session.role === "patient" && session.patientDbId !== patientId) {
+  if (session.roles.includes("patient") && session.patientDbId !== patientId) {
     res.status(403).json({ error: "Not your record" });
     return;
   }

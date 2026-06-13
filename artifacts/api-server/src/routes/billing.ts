@@ -9,7 +9,7 @@ const router: IRouter = Router();
 // Returns encounters with partial or unpaid payment for insurance billing
 router.get("/billing/claims", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "receptionist" && session.role !== "doctor") {
+  if (!session.roles.includes("receptionist") && !session.roles.includes("doctor")) {
     res.status(403).json({ error: "Access denied" });
     return;
   }
@@ -70,7 +70,7 @@ router.get("/billing/claims", requireAuth, async (req, res): Promise<void> => {
 // PATCH /consultations/:id/payment — receptionist/doctor can record payment
 router.patch("/consultations/:id/payment", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "receptionist" && session.role !== "doctor") {
+  if (!session.roles.includes("receptionist") && !session.roles.includes("doctor")) {
     res.status(403).json({ error: "Only receptionist or doctor can record payment" });
     return;
   }

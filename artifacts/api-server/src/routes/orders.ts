@@ -35,7 +35,7 @@ router.patch("/orders/:id", requireAuth, async (req, res): Promise<void> => {
 
 router.delete("/orders/:id", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "doctor") {
+  if (!session.roles.includes("doctor")) {
     res.status(403).json({ error: "Only doctors can cancel orders" });
     return;
   }

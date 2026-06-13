@@ -1,10 +1,13 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, usersTable, medicalCentersTable, staffInvitesTable, doctorsTable, patientsTable } from "@workspace/db";
-import { requireAuth, getSessionUser } from "../lib/session";
+import { requireAuth, getSessionUser, primaryRole } from "../lib/session";
 import { z } from "zod";
 
 const router: IRouter = Router();
+
+const STAFF_ROLES = ["admin", "doctor", "receptionist", "pharmacist", "pharmacy"] as const;
+type StaffRole = (typeof STAFF_ROLES)[number];
 
 router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
@@ -16,7 +19,6 @@ const CompleteAdminOnboardingBody = z.object({
   address: z.string().optional(),
   latitude: z.string().optional(),
   longitude: z.string().optional(),
-  adminIsDoctor: z.boolean().optional().default(true),
 });
 
 const CompletePatientOnboardingBody = z.object({
@@ -30,27 +32,52 @@ const CompletePatientOnboardingBody = z.object({
   currentMedications: z.string().optional(),
 });
 
+// ── POST /users/onboarding/role ───────────────────────────────────────────────
+// Accept an array of roles. Primary role is computed by priority.
 router.post("/users/onboarding/role", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  const { role } = req.body as { role?: string };
 
-  if (!role || !["admin", "patient"].includes(role)) {
-    res.status(400).json({ error: "Role must be admin or patient" });
-    return;
-  }
-
-  if (session.role !== "pending") {
+  if (session.role !== "pending" && session.roles.length > 0) {
     res.status(400).json({ error: "Role already set" });
     return;
   }
 
-  await db.update(usersTable).set({ role }).where(eq(usersTable.id, session.userId));
-  res.json({ ok: true, role });
+  const rawRoles: unknown = req.body.roles;
+  const rawRole: unknown = req.body.role;
+
+  // Accept either roles[] or legacy single role
+  let roles: string[] = [];
+  if (Array.isArray(rawRoles)) {
+    roles = rawRoles.filter((r): r is string => typeof r === "string");
+  } else if (typeof rawRole === "string") {
+    roles = [rawRole];
+  }
+
+  const validRoles = ["admin", "patient", "doctor", "receptionist", "pharmacist", "pharmacy"];
+  const invalid = roles.find(r => !validRoles.includes(r));
+  if (invalid || roles.length === 0) {
+    res.status(400).json({ error: "Invalid role(s)" });
+    return;
+  }
+
+  // Patient must be alone — cannot be combined with staff roles
+  if (roles.includes("patient") && roles.length > 1) {
+    res.status(400).json({ error: "Patient role cannot be combined with staff roles" });
+    return;
+  }
+
+  const primary = primaryRole(roles);
+  await db.update(usersTable)
+    .set({ role: primary, roles })
+    .where(eq(usersTable.id, session.userId));
+
+  res.json({ ok: true, role: primary, roles });
 });
 
+// ── POST /users/onboarding/admin ──────────────────────────────────────────────
 router.post("/users/onboarding/admin", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "admin") {
+  if (!session.roles.includes("admin")) {
     res.status(403).json({ error: "Admin only" });
     return;
   }
@@ -61,7 +88,7 @@ router.post("/users/onboarding/admin", requireAuth, async (req, res): Promise<vo
     return;
   }
 
-  const { centerName, address, latitude, longitude, adminIsDoctor } = parsed.data;
+  const { centerName, address, latitude, longitude } = parsed.data;
   const [center] = await db.insert(medicalCentersTable).values({
     name: centerName,
     address: address ?? null,
@@ -75,9 +102,9 @@ router.post("/users/onboarding/admin", requireAuth, async (req, res): Promise<vo
     onboardingComplete: true,
   }).where(eq(usersTable.id, session.userId));
 
-  // If the admin is also a doctor, create a doctor record for them
+  // If the admin is also a doctor, create a doctor record
   let doctor = null;
-  if (adminIsDoctor) {
+  if (session.roles.includes("doctor")) {
     const nameParts = (session.name ?? session.email).split(" ");
     const firstName = nameParts[0] ?? session.email;
     const lastName = nameParts.slice(1).join(" ") || "-";
@@ -95,9 +122,10 @@ router.post("/users/onboarding/admin", requireAuth, async (req, res): Promise<vo
   res.json({ ok: true, center, doctor });
 });
 
+// ── POST /users/onboarding/patient ────────────────────────────────────────────
 router.post("/users/onboarding/patient", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "patient") {
+  if (!session.roles.includes("patient")) {
     res.status(403).json({ error: "Patient only" });
     return;
   }
@@ -127,6 +155,7 @@ router.post("/users/onboarding/patient", requireAuth, async (req, res): Promise<
   res.json({ ok: true, patient });
 });
 
+// ── POST /users/invite-staff ──────────────────────────────────────────────────
 const InviteStaffBody = z.object({
   email: z.string().email(),
   role: z.enum(["doctor", "pharmacist", "receptionist"]),
@@ -134,7 +163,7 @@ const InviteStaffBody = z.object({
 
 router.post("/users/invite-staff", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "admin" || !session.medicalCenterId) {
+  if (!session.roles.includes("admin") || !session.medicalCenterId) {
     res.status(403).json({ error: "Admin only" });
     return;
   }
@@ -158,9 +187,10 @@ router.post("/users/invite-staff", requireAuth, async (req, res): Promise<void> 
   res.json({ ok: true, invite });
 });
 
+// ── GET /users/staff ──────────────────────────────────────────────────────────
 router.get("/users/staff", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "admin" || !session.medicalCenterId) {
+  if (!session.roles.includes("admin") || !session.medicalCenterId) {
     res.status(403).json({ error: "Admin only" });
     return;
   }
@@ -170,14 +200,15 @@ router.get("/users/staff", requireAuth, async (req, res): Promise<void> => {
   res.json({ staff, invites });
 });
 
+// ── PATCH /users/ai-assistant ─────────────────────────────────────────────────
 router.patch("/users/ai-assistant", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "admin" && session.role !== "doctor") {
+  if (!session.roles.includes("admin") && !session.roles.includes("doctor")) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
   const { enabled, targetUserId } = req.body as { enabled?: boolean; targetUserId?: number };
-  const userId = (session.role === "admin" && targetUserId) ? targetUserId : session.userId;
+  const userId = (session.roles.includes("admin") && targetUserId) ? targetUserId : session.userId;
   await db.update(usersTable).set({ aiAssistantEnabled: enabled ?? false }).where(eq(usersTable.id, userId));
   res.json({ ok: true });
 });

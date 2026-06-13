@@ -154,7 +154,7 @@ router.get("/map/prescription/:id/pharmacies", requireAuth, async (req, res): Pr
   if (!prescription) { res.status(404).json({ error: "Prescription not found" }); return; }
 
   // Patient can only check their own prescription
-  if (session.role === "patient" && prescription.patientId !== session.patientDbId) {
+  if (session.roles.includes("patient") && prescription.patientId !== session.patientDbId) {
     res.status(403).json({ error: "Access denied" });
     return;
   }

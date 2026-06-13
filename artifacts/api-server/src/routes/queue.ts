@@ -25,9 +25,9 @@ router.get("/queue", requireAuth, async (req, res): Promise<void> => {
     .where(and(gte(appointmentsTable.scheduledAt, todayStart), lt(appointmentsTable.scheduledAt, todayEnd)));
 
   // Doctor sees only their own queue; pharmacy/admin sees all
-  if (session.role === "doctor" && session.doctorDbId != null) {
+  if (session.roles.includes("doctor") && session.doctorDbId != null) {
     appointments = appointments.filter((a) => a.doctorId === session.doctorDbId);
-  } else if (session.role === "patient" && session.patientDbId != null) {
+  } else if (session.roles.includes("patient") && session.patientDbId != null) {
     appointments = appointments.filter((a) => a.patientId === session.patientDbId);
   }
 
@@ -72,7 +72,7 @@ router.post("/queue/:appointmentId/advance", requireAuth, async (req, res): Prom
   }
 
   // Only the assigned doctor can advance their own queue
-  if (session.role === "doctor" && session.doctorDbId !== appointment.doctorId) {
+  if (session.roles.includes("doctor") && session.doctorDbId !== appointment.doctorId) {
     res.status(403).json({ error: "Not authorized to manage this appointment" });
     return;
   }

@@ -58,16 +58,16 @@ router.get("/prescriptions", requireAuth, async (req, res): Promise<void> => {
   let all = await db.select().from(prescriptionsTable).orderBy(prescriptionsTable.issuedAt);
 
   // Role-based isolation
-  if (session.role === "patient" && session.patientDbId != null) {
+  if (session.roles.includes("patient") && session.patientDbId != null) {
     all = all.filter((p) => p.patientId === session.patientDbId);
-  } else if (session.role === "doctor" && session.doctorDbId != null) {
+  } else if (session.roles.includes("doctor") && session.doctorDbId != null) {
     all = all.filter((p) => p.doctorId === session.doctorDbId);
   }
   // pharmacy sees all prescriptions
 
   const { patientId, doctorId, status, limit = 20 } = parsed.data;
-  if (patientId && session.role !== "patient") all = all.filter((p) => p.patientId === patientId);
-  if (doctorId && session.role !== "doctor") all = all.filter((p) => p.doctorId === doctorId);
+  if (patientId && !session.roles.includes("patient")) all = all.filter((p) => p.patientId === patientId);
+  if (doctorId && !session.roles.includes("doctor")) all = all.filter((p) => p.doctorId === doctorId);
   if (status) all = all.filter((p) => p.status === status);
   // consultationId filter (not in generated schema — parsed directly)
   const consultationIdRaw = req.query["consultationId"];
@@ -83,7 +83,7 @@ router.get("/prescriptions", requireAuth, async (req, res): Promise<void> => {
 
 router.post("/prescriptions", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role === "patient") {
+  if (session.roles.includes("patient")) {
     res.status(403).json({ error: "Patients cannot create prescriptions" });
     return;
   }
@@ -132,11 +132,11 @@ router.get("/prescriptions/:id", requireAuth, async (req, res): Promise<void> =>
   }
 
   // Access control
-  if (session.role === "patient" && session.patientDbId !== prescription.patientId) {
+  if (session.roles.includes("patient") && session.patientDbId !== prescription.patientId) {
     res.status(403).json({ error: "Not your prescription" });
     return;
   }
-  if (session.role === "doctor" && session.doctorDbId !== prescription.doctorId) {
+  if (session.roles.includes("doctor") && session.doctorDbId !== prescription.doctorId) {
     res.status(403).json({ error: "Not your prescription" });
     return;
   }
@@ -151,7 +151,7 @@ router.get("/prescriptions/:id", requireAuth, async (req, res): Promise<void> =>
 
 router.patch("/prescriptions/:id", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role === "patient") {
+  if (session.roles.includes("patient")) {
     res.status(403).json({ error: "Patients cannot modify prescriptions" });
     return;
   }

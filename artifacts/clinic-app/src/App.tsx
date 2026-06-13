@@ -133,6 +133,16 @@ function ClerkQueryClientCacheInvalidator() {
   return null;
 }
 
+function rootPage(roles: string[]) {
+  const has = (...rs: string[]) => rs.some(r => roles.includes(r));
+  // Pure receptionist (not also a doctor) → reception-focused home
+  if (has("receptionist") && !has("doctor", "admin")) return <ReceptionPage />;
+  // Pure admin (not also a doctor) → admin home
+  if (has("admin") && !has("doctor")) return <AdminPage />;
+  // Everyone else (doctor, patient, multi-role with doctor) → dashboard
+  return <DashboardPage />;
+}
+
 function AppRoutes() {
   const { user, loading } = useAuth();
 
@@ -158,7 +168,8 @@ function AppRoutes() {
     );
   }
 
-  if (!user.onboardingComplete || user.role === "pending") {
+  // Needs onboarding if not complete or no roles assigned yet
+  if (!user.onboardingComplete || user.roles.length === 0) {
     return (
       <I18nProvider>
         <OnboardingPage />
@@ -171,7 +182,7 @@ function AppRoutes() {
       <Layout>
         <Switch>
           <Route path="/">
-            {user.role === "receptionist" ? <ReceptionPage /> : user.role === "admin" ? <AdminPage /> : <DashboardPage />}
+            {rootPage(user.roles)}
           </Route>
           <Route path="/patients" component={PatientsPage} />
           <Route path="/queue" component={QueuePage} />

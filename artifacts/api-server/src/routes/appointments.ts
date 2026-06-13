@@ -117,9 +117,9 @@ router.get("/appointments/today", requireAuth, async (req, res): Promise<void> =
     .from(appointmentsTable)
     .where(and(gte(appointmentsTable.scheduledAt, todayStart), lt(appointmentsTable.scheduledAt, todayEnd)));
 
-  if (session.role === "doctor" && session.doctorDbId != null) {
+  if (session.roles.includes("doctor") && session.doctorDbId != null) {
     all = all.filter((a) => a.doctorId === session.doctorDbId);
-  } else if (session.role === "patient" && session.patientDbId != null) {
+  } else if (session.roles.includes("patient") && session.patientDbId != null) {
     all = all.filter((a) => a.patientId === session.patientDbId);
   }
 
@@ -146,15 +146,15 @@ router.get("/appointments", requireAuth, async (req, res): Promise<void> => {
   const { patientMap, doctorMap } = await getMaps();
   let all = await db.select().from(appointmentsTable).orderBy(appointmentsTable.scheduledAt);
 
-  if (session.role === "doctor" && session.doctorDbId != null) {
+  if (session.roles.includes("doctor") && session.doctorDbId != null) {
     all = all.filter((a) => a.doctorId === session.doctorDbId);
-  } else if (session.role === "patient" && session.patientDbId != null) {
+  } else if (session.roles.includes("patient") && session.patientDbId != null) {
     all = all.filter((a) => a.patientId === session.patientDbId);
   }
 
   const { doctorId, patientId, status, date, limit = 50, offset = 0 } = parsed.data;
-  if (doctorId && session.role !== "patient") all = all.filter((a) => a.doctorId === doctorId);
-  if (patientId && session.role !== "doctor") all = all.filter((a) => a.patientId === patientId);
+  if (doctorId && !session.roles.includes("patient")) all = all.filter((a) => a.doctorId === doctorId);
+  if (patientId && !session.roles.includes("doctor")) all = all.filter((a) => a.patientId === patientId);
   if (status) all = all.filter((a) => a.status === status);
   if (date) {
     const d = new Date(date);
@@ -170,7 +170,7 @@ router.get("/appointments", requireAuth, async (req, res): Promise<void> => {
 // POST /appointments/book  (patient only)
 router.post("/appointments/book", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "patient" || !session.patientDbId) {
+  if (!session.roles.includes("patient") || !session.patientDbId) {
     res.status(403).json({ error: "Only patients can use self-booking" }); return;
   }
 
@@ -239,7 +239,7 @@ router.post("/appointments/book", requireAuth, async (req, res): Promise<void> =
 // ── Patient cancel ────────────────────────────────────────────────────────────
 router.patch("/appointments/:id/cancel", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "patient" || !session.patientDbId) {
+  if (!session.roles.includes("patient") || !session.patientDbId) {
     res.status(403).json({ error: "Only patients can use self-cancel" }); return;
   }
 
@@ -271,7 +271,7 @@ router.patch("/appointments/:id/cancel", requireAuth, async (req, res): Promise<
 // ── Patient reschedule ────────────────────────────────────────────────────────
 router.patch("/appointments/:id/reschedule", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role !== "patient" || !session.patientDbId) {
+  if (!session.roles.includes("patient") || !session.patientDbId) {
     res.status(403).json({ error: "Only patients can use self-reschedule" }); return;
   }
 
@@ -330,7 +330,7 @@ router.patch("/appointments/:id/reschedule", requireAuth, async (req, res): Prom
 
 router.post("/appointments", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role === "patient") {
+  if (session.roles.includes("patient")) {
     res.status(403).json({ error: "Patients must use POST /appointments/book" }); return;
   }
 
@@ -370,10 +370,10 @@ router.get("/appointments/:id", requireAuth, async (req, res): Promise<void> => 
     .where(eq(appointmentsTable.id, params.data.id));
 
   if (!appointment) { res.status(404).json({ error: "Appointment not found" }); return; }
-  if (session.role === "doctor" && session.doctorDbId !== appointment.doctorId) {
+  if (session.roles.includes("doctor") && session.doctorDbId !== appointment.doctorId) {
     res.status(403).json({ error: "Not your appointment" }); return;
   }
-  if (session.role === "patient" && session.patientDbId !== appointment.patientId) {
+  if (session.roles.includes("patient") && session.patientDbId !== appointment.patientId) {
     res.status(403).json({ error: "Not your appointment" }); return;
   }
 
@@ -383,7 +383,7 @@ router.get("/appointments/:id", requireAuth, async (req, res): Promise<void> => 
 
 router.patch("/appointments/:id", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role === "patient") {
+  if (session.roles.includes("patient")) {
     res.status(403).json({ error: "Patients must use /cancel or /reschedule endpoints" }); return;
   }
 
@@ -412,7 +412,7 @@ router.patch("/appointments/:id", requireAuth, async (req, res): Promise<void> =
 
 router.delete("/appointments/:id", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.role === "patient") {
+  if (session.roles.includes("patient")) {
     res.status(403).json({ error: "Patients must use the cancel endpoint" }); return;
   }
 
