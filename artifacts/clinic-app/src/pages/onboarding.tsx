@@ -39,6 +39,7 @@ export default function OnboardingPage() {
 
   const [step, setStep] = useState<Step>(initialStep);
   const [selectedRole, setSelectedRole] = useState<"admin" | "patient" | null>(null);
+  const [adminIsDoctor, setAdminIsDoctor] = useState(true);
 
   const [centerName, setCenterName] = useState("");
   const [centerAddress, setCenterAddress] = useState("");
@@ -63,7 +64,7 @@ export default function OnboardingPage() {
   });
 
   const adminMutation = useMutation({
-    mutationFn: (data: { centerName: string; address?: string }) =>
+    mutationFn: (data: { centerName: string; address?: string; adminIsDoctor: boolean }) =>
       apiFetch("/users/onboarding/admin", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["auth-me"] }),
   });
@@ -88,7 +89,7 @@ export default function OnboardingPage() {
 
   function handleSubmitAdmin() {
     if (!centerName.trim()) return;
-    adminMutation.mutate({ centerName: centerName.trim(), address: centerAddress || undefined });
+    adminMutation.mutate({ centerName: centerName.trim(), address: centerAddress || undefined, adminIsDoctor });
   }
 
   function handleSubmitPatient() {
@@ -125,16 +126,16 @@ export default function OnboardingPage() {
               <CardDescription>Choose how you'll be using HealthNexus</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
-              <button
+              <div
                 onClick={() => setSelectedRole("admin")}
                 className={cn(
-                  "w-full p-5 rounded-xl border-2 text-left transition-all",
+                  "w-full rounded-xl border-2 text-left transition-all cursor-pointer",
                   selectedRole === "admin"
                     ? "border-emerald-500 bg-emerald-50"
                     : "border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50"
                 )}
               >
-                <div className="flex items-start gap-4">
+                <div className="flex items-start gap-4 p-5">
                   <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
                     <Building2 className="w-5 h-5 text-emerald-600" />
                   </div>
@@ -143,7 +144,30 @@ export default function OnboardingPage() {
                     <p className="text-sm text-slate-500 mt-1">Manage a clinic or hospital. Add doctors, pharmacists, and receptionists to your center.</p>
                   </div>
                 </div>
-              </button>
+
+                {/* "Admin is also a doctor" — shown when admin card is selected */}
+                {selectedRole === "admin" && (
+                  <div
+                    onClick={e => e.stopPropagation()}
+                    className="mx-5 mb-4 flex items-start gap-3 rounded-lg border border-emerald-200 bg-white px-4 py-3"
+                  >
+                    <Checkbox
+                      id="adminIsDoctor"
+                      checked={adminIsDoctor}
+                      onCheckedChange={(v) => setAdminIsDoctor(!!v)}
+                      className="mt-0.5 shrink-0"
+                    />
+                    <label htmlFor="adminIsDoctor" className="cursor-pointer select-none" onClick={e => e.stopPropagation()}>
+                      <span className="block text-sm font-medium text-slate-800">
+                        Admin is also a doctor
+                      </span>
+                      <span className="block text-sm font-medium text-slate-600 mt-0.5" dir="rtl">
+                        المشرف طبيب أيضاً
+                      </span>
+                    </label>
+                  </div>
+                )}
+              </div>
 
               <button
                 onClick={() => setSelectedRole("patient")}

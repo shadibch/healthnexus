@@ -16,6 +16,7 @@ const CompleteAdminOnboardingBody = z.object({
   address: z.string().optional(),
   latitude: z.string().optional(),
   longitude: z.string().optional(),
+  adminIsDoctor: z.boolean().optional().default(true),
 });
 
 const CompletePatientOnboardingBody = z.object({
@@ -60,7 +61,7 @@ router.post("/users/onboarding/admin", requireAuth, async (req, res): Promise<vo
     return;
   }
 
-  const { centerName, address, latitude, longitude } = parsed.data;
+  const { centerName, address, latitude, longitude, adminIsDoctor } = parsed.data;
   const [center] = await db.insert(medicalCentersTable).values({
     name: centerName,
     address: address ?? null,
@@ -74,7 +75,24 @@ router.post("/users/onboarding/admin", requireAuth, async (req, res): Promise<vo
     onboardingComplete: true,
   }).where(eq(usersTable.id, session.userId));
 
-  res.json({ ok: true, center });
+  // If the admin is also a doctor, create a doctor record for them
+  let doctor = null;
+  if (adminIsDoctor) {
+    const nameParts = (session.name ?? session.email).split(" ");
+    const firstName = nameParts[0] ?? session.email;
+    const lastName = nameParts.slice(1).join(" ") || "-";
+    [doctor] = await db.insert(doctorsTable).values({
+      userId: session.userId,
+      clerkId: session.clerkId ?? null,
+      firstName,
+      lastName,
+      specialization: "General Practitioner",
+      email: session.email,
+      medicalCenterId: center.id,
+    }).returning();
+  }
+
+  res.json({ ok: true, center, doctor });
 });
 
 router.post("/users/onboarding/patient", requireAuth, async (req, res): Promise<void> => {
