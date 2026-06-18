@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { runStartupSeed } from "./seed";
 import { startBackupScheduler } from "./lib/backup";
+import { startReminderScheduler } from "./lib/reminder-scheduler";
 
 const rawPort = process.env["PORT"];
 
@@ -35,5 +36,11 @@ app.listen(port, async (err) => {
     await startBackupScheduler();
   } catch (schedErr) {
     logger.error({ err: schedErr }, "Backup scheduler failed to start — server continues");
+  }
+
+  try {
+    startReminderScheduler();
+  } catch (reminderErr) {
+    logger.error({ err: reminderErr }, "Reminder scheduler failed to start — server continues");
   }
 });

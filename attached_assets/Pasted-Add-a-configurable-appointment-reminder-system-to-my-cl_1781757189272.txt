@@ -1,0 +1,103 @@
+Add a configurable appointment reminder system to my clinic management SaaS.
+
+Requirements:
+
+### Reminder Channels
+
+* Support Email and WhatsApp initially.
+* Design the system so SMS and push notifications can be added later.
+
+### Reminder Scheduling
+
+Allow each clinic to configure multiple reminders for appointments. Examples:
+
+* 7 days before appointment.
+* 48 hours before appointment.
+* 24 hours before appointment.
+* 3 hours before appointment.
+* 30 minutes before appointment.
+
+The clinic should be able to enable or disable any reminder and customize the timing.
+
+### Message Templates
+
+Create customizable templates with variables such as:
+
+* {{patient_name}}
+* {{doctor_name}}
+* {{clinic_name}}
+* {{appointment_date}}
+* {{appointment_time}}
+
+Example:
+Hello {{patient_name}},
+
+This is a reminder that you have an appointment with Dr. {{doctor_name}} on {{appointment_date}} at {{appointment_time}}.
+
+Thank you,
+{{clinic_name}}
+
+### Admin Settings
+
+Create a Reminder Settings page where administrators can:
+
+* Enable or disable Email reminders.
+* Enable or disable WhatsApp reminders.
+* Configure reminder times.
+* Edit message templates.
+* Preview messages before saving.
+
+### Automation
+
+Implement a background scheduler (cron job or queue worker) that:
+
+1. Runs every few minutes.
+2. Finds upcoming appointments that match reminder conditions.
+3. Sends reminders automatically.
+4. Marks reminders as sent to avoid duplicates.
+
+### Database Design
+
+Create tables:
+
+AppointmentReminderConfig
+
+* id
+* clinic_id
+* channel (email, whatsapp)
+* enabled
+* offset_value
+* offset_unit (minutes, hours, days)
+* template
+
+AppointmentReminderLog
+
+* id
+* appointment_id
+* patient_id
+* channel
+* sent_at
+* status
+* error_message
+
+### Additional Features
+
+* Prevent duplicate reminders.
+* Stop future reminders if an appointment is canceled.
+* Stop future reminders if the patient reschedules.
+* Support timezone per clinic.
+* Log all reminder activities.
+* Retry failed reminders.
+* Display reminder history on the appointment details page.
+
+### UI
+
+Add a "Reminder Settings" section with:
+
+* Toggle switches.
+* Timing configuration.
+* Template editor.
+* Test reminder button.
+* Reminder history table.
+
+Write production-quality code, create migrations, APIs, background jobs, validation, and responsive UI components. Follow clean architecture and make the feature extensible for future SMS and push notification channels.

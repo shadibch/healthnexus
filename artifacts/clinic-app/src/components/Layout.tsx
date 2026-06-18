@@ -22,6 +22,7 @@ import {
   BarChart2,
   Settings,
   Building2,
+  Bell,
 } from "lucide-react";
 import { useClinicSettings } from "@/lib/clinic-settings";
 import { Button } from "@/components/ui/button";
@@ -129,6 +130,11 @@ function buildNav(
     add({ href: "/appointments",  label: t("myAppointments"),  icon: CalendarClock, badge: 0,                    badgeVariant: "red"   });
     add({ href: "/prescriptions", label: t("myPrescriptions"), icon: FileText,      badge: badges.prescriptions, badgeVariant: "amber" });
     add({ href: "/map",           label: t("findNearby"),      icon: Map,           badge: 0,                    badgeVariant: "red"   });
+  }
+
+  // ── Reminders (admin + doctor) ─────────────────────────────────────────────
+  if (has("admin", "doctor")) {
+    add({ href: "/reminders", label: lang === "ar" ? "التذكيرات" : "Reminders", icon: Bell, badge: 0, badgeVariant: "red" });
   }
 
   // ── Settings (staff only) ──────────────────────────────────────────────────

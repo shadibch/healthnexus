@@ -25,6 +25,7 @@ import MedicationsPage from "@/pages/medications";
 import MapPage from "@/pages/map";
 import ReportsPage from "@/pages/reports";
 import SettingsPage from "@/pages/settings";
+import RemindersPage from "@/pages/reminders";
 import AdminPage from "@/pages/admin";
 import NotFound from "@/pages/not-found";
 
@@ -196,6 +197,7 @@ function AppRoutes() {
           <Route path="/map" component={MapPage} />
           <Route path="/reports" component={ReportsPage} />
           <Route path="/settings" component={SettingsPage} />
+          <Route path="/reminders" component={RemindersPage} />
           <Route path="/admin" component={AdminPage} />
           <Route component={NotFound} />
         </Switch>
