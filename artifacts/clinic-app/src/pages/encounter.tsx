@@ -46,6 +46,7 @@ import {
   CornerDownRight,
   Pill,
   Trash2,
+  Printer,
 } from "lucide-react";
 import MedicationAutocomplete, { type MedicationOption } from "@/components/MedicationAutocomplete";
 import PaymentPanel from "@/components/PaymentPanel";
@@ -54,6 +55,8 @@ import { checkInteractions, checkPregnancyAlerts, checkAllergyAlert, type DrugAl
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
+import { useClinicSettings } from "@/lib/clinic-settings";
+import { printPrescription } from "@/lib/print-prescription";
 
 const ORDER_TYPES = [
   { value: "lab",        label: "Lab Test",   labelAr: "تحليل مختبري",       icon: FlaskConical, color: "text-blue-600 bg-blue-50 border-blue-200" },
@@ -321,6 +324,7 @@ export default function EncounterPage() {
   const { lang, isRTL } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const clinic = useClinicSettings();
 
   const apptId = parseInt(appointmentId ?? "0");
 
@@ -860,9 +864,34 @@ export default function EncounterPage() {
                             <span className="text-xs font-semibold text-emerald-800">
                               {lang === "ar" ? "وصفة" : "Prescription"} #{rx.id}
                             </span>
-                            <Badge className="text-xs bg-emerald-100 text-emerald-700 border-emerald-300 capitalize">
-                              {rx.status}
-                            </Badge>
+                            <div className={cn("flex items-center gap-2", isRTL && "flex-row-reverse")}>
+                              <Badge className="text-xs bg-emerald-100 text-emerald-700 border-emerald-300 capitalize">
+                                {rx.status}
+                              </Badge>
+                              {rx.items.length > 0 && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 px-2 text-xs gap-1 text-emerald-700 hover:bg-emerald-100"
+                                  onClick={() =>
+                                    printPrescription(
+                                      {
+                                        id: rx.id,
+                                        patientName: appointment?.patientName ?? null,
+                                        doctorName: appointment?.doctorName ?? null,
+                                        issuedAt: rx.issuedAt,
+                                        notes: null,
+                                        items: rx.items,
+                                      },
+                                      { clinicName: clinic.clinicName, logoBase64: clinic.logoBase64 }
+                                    )
+                                  }
+                                >
+                                  <Printer className="w-3 h-3" />
+                                  {lang === "ar" ? "طباعة" : "Print"}
+                                </Button>
+                              )}
+                            </div>
                           </div>
                           <div className="px-3 py-2 space-y-1.5">
                             {rx.items.map((item) => (

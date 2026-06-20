@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useRole } from "@/lib/role";
 import { useI18n } from "@/lib/i18n";
+import { useClinicSettings } from "@/lib/clinic-settings";
+import { printPrescription } from "@/lib/print-prescription";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Pill, Clock, CheckCircle2, User, Stethoscope, MapPin } from "lucide-react";
+import { FileText, Pill, Clock, CheckCircle2, User, Stethoscope, MapPin, Printer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -53,6 +55,7 @@ export default function PrescriptionsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dispensing, setDispensing] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const clinic = useClinicSettings();
 
   const { data: prescriptions, isLoading } = useQuery<Prescription[]>({
     queryKey: ["prescriptions", statusFilter],
@@ -84,6 +87,20 @@ export default function PrescriptionsPage() {
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+  };
+
+  const handlePrint = (rx: Prescription) => {
+    printPrescription(
+      {
+        id: rx.id,
+        patientName: rx.patientName,
+        doctorName: rx.doctorName,
+        issuedAt: rx.issuedAt,
+        notes: rx.notes,
+        items: rx.items,
+      },
+      { clinicName: clinic.clinicName, logoBase64: clinic.logoBase64 }
+    );
   };
 
   const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode }> = {
@@ -133,6 +150,8 @@ export default function PrescriptionsPage() {
           : prescriptions?.map((rx) => {
               const cfg = STATUS_CONFIG[rx.status] ?? STATUS_CONFIG.pending;
               const isExpanded = expanded.has(rx.id);
+              const isPharmacy = role === "pharmacy";
+
               return (
                 <Card key={rx.id} className="border-border">
                   <CardContent className="p-4">
@@ -165,15 +184,37 @@ export default function PrescriptionsPage() {
                           </div>
                         </div>
                       </div>
-                      <div className={cn("flex items-center gap-2 shrink-0", isRTL && "flex-row-reverse")}>
-                        {role === "pharmacy" && rx.status === "pending" && (
-                          <Button size="sm" onClick={() => {
-                            setDispensing(rx.id);
-                            dispenseMutation.mutate(rx.id);
-                          }} disabled={dispensing === rx.id} className="text-xs">
+
+                      <div className={cn("flex items-center gap-2 shrink-0 flex-wrap justify-end", isRTL && "flex-row-reverse")}>
+                        {/* Pharmacy: Issue (dispense) + Print */}
+                        {isPharmacy && rx.status === "pending" && (
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setDispensing(rx.id);
+                              dispenseMutation.mutate(rx.id);
+                            }}
+                            disabled={dispensing === rx.id}
+                            className="text-xs"
+                          >
                             {dispensing === rx.id ? "..." : t("dispense")}
                           </Button>
                         )}
+
+                        {/* Print — always visible for pharmacy; visible to all other roles too */}
+                        {rx.items.length > 0 && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={cn("text-xs gap-1.5", isRTL && "flex-row-reverse")}
+                            onClick={() => handlePrint(rx)}
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            {isRTL ? "طباعة" : "Print"}
+                          </Button>
+                        )}
+
+                        {/* Patient: find nearby pharmacy */}
                         {role === "patient" && rx.items.length > 0 && (
                           <Button
                             size="sm"
@@ -185,6 +226,7 @@ export default function PrescriptionsPage() {
                             {isRTL ? "أقرب صيدلية" : "Find Pharmacy"}
                           </Button>
                         )}
+
                         <Button size="sm" variant="ghost" onClick={() => toggleExpand(rx.id)} className="text-xs">
                           {isExpanded ? "↑" : `${rx.items.length} ${t("items")}`}
                         </Button>
