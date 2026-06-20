@@ -59,7 +59,6 @@ interface Doctor {
   firstName: string;
   lastName: string;
   specialization: string;
-  consultationFee: string | null;
   isAvailable: boolean;
 }
 
@@ -269,12 +268,6 @@ function BookDialog({
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {lang === "ar" ? (SPEC_AR[doc.specialization] ?? doc.specialization) : doc.specialization}
                     </p>
-                    {doc.consultationFee && (
-                      <p className="text-xs font-semibold text-emerald-700 mt-1">
-                        AED {parseFloat(doc.consultationFee).toFixed(0)}
-                        <span className="font-normal text-muted-foreground"> / {lang === "ar" ? "زيارة" : "visit"}</span>
-                      </p>
-                    )}
                   </div>
                   <ChevronRight className={cn("w-4 h-4 text-muted-foreground self-center shrink-0", isRTL && "rotate-180")} />
                 </button>

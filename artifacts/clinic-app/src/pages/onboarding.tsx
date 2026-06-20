@@ -59,7 +59,6 @@ export default function OnboardingPage() {
 
   // ── Doctor profile (shown when admin also selected doctor role) ───────────
   const [doctorSpec, setDoctorSpec] = useState("General Practitioner");
-  const [doctorFee, setDoctorFee] = useState("");
 
   // ── Patient form ───────────────────────────────────────────────────────────
   const [firstName, setFirstName] = useState("");
@@ -126,7 +125,6 @@ export default function OnboardingPage() {
       address: centerAddress || undefined,
       adminName: adminName.trim() || undefined,
       specialization: extraRoles.has("doctor") ? (doctorSpec.trim() || undefined) : undefined,
-      consultationFee: extraRoles.has("doctor") ? (doctorFee.trim() || undefined) : undefined,
     });
   }
 
@@ -330,20 +328,6 @@ export default function OnboardingPage() {
                       onChange={e => setDoctorSpec(e.target.value)}
                       className="mt-1"
                     />
-                  </div>
-                  <div>
-                    <Label htmlFor="doctorFee">Consultation Fee (AED)</Label>
-                    <Input
-                      id="doctorFee"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="e.g. 300"
-                      value={doctorFee}
-                      onChange={e => setDoctorFee(e.target.value)}
-                      className="mt-1"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">Can be updated later by admin</p>
                   </div>
                 </div>
               )}

@@ -47,11 +47,6 @@ async function resolveDoctorFee(
     }
   }
 
-  // Backward compat: use legacy consultationFee on the doctor record
-  if (doctor.consultationFee != null) {
-    return { fee: doctor.consultationFee, categoryName: null };
-  }
-
   return { fee: null, categoryName: null };
 }
 

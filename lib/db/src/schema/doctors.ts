@@ -13,7 +13,6 @@ export const doctorsTable = pgTable("doctors", {
   email: text("email"),
   licenseNumber: text("license_number"),
   isAvailable: boolean("is_available").notNull().default(true),
-  consultationFee: numeric("consultation_fee", { precision: 10, scale: 2 }),
   bio: text("bio"),
   latitude: numeric("latitude", { precision: 10, scale: 6 }),
   longitude: numeric("longitude", { precision: 10, scale: 6 }),

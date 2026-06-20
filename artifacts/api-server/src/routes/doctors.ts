@@ -73,12 +73,6 @@ router.patch("/doctors/:id", requireAuth, async (req, res): Promise<void> => {
 
   const data = { ...parsed.data } as Record<string, unknown>;
 
-  // consultationFee may only be changed by admins
-  if ("consultationFee" in data && !session.roles.includes("admin")) {
-    res.status(403).json({ error: "Only admins may update the consultation fee" });
-    return;
-  }
-
   const [doctor] = await db
     .update(doctorsTable)
     .set(data as any)

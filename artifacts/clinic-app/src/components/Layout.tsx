@@ -157,7 +157,6 @@ type DoctorProfile = {
   firstName: string;
   lastName: string;
   specialization: string;
-  consultationFee: string | null;
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -177,30 +176,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     enabled: !!user?.doctorDbId,
     staleTime: 60_000,
   });
-
-  // Inline fee editing state
-  const [editingFee, setEditingFee] = useState(false);
-  const [feeInput, setFeeInput] = useState("");
-
-  const feeMutation = useMutation({
-    mutationFn: (fee: string) =>
-      apiFetch(`/doctors/${user!.doctorDbId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ consultationFee: fee }),
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["my-doctor-profile", user?.doctorDbId] });
-      setEditingFee(false);
-    },
-  });
-
-  function startEditFee() {
-    setFeeInput(doctorProfile?.consultationFee ?? "");
-    setEditingFee(true);
-  }
-  function saveFee() {
-    if (feeInput.trim()) feeMutation.mutate(feeInput.trim());
-  }
 
   // Inline name editing state
   const [editingName, setEditingName] = useState(false);
@@ -350,40 +325,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <p className={cn("text-[11px] text-muted-foreground truncate", isRTL && "text-right")}>
               {doctorProfile.specialization}
             </p>
-            <div className={cn("flex items-center gap-1 pt-0.5", isRTL && "flex-row-reverse")}>
-              {editingFee ? (
-                <>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={feeInput}
-                    onChange={e => setFeeInput(e.target.value)}
-                    className="h-6 text-xs px-1.5 w-20"
-                    autoFocus
-                    onKeyDown={e => { if (e.key === "Enter") saveFee(); if (e.key === "Escape") setEditingFee(false); }}
-                  />
-                  <span className="text-[10px] text-muted-foreground">AED</span>
-                  <button onClick={saveFee} disabled={feeMutation.isPending} className="text-emerald-600 hover:text-emerald-700 ml-0.5">
-                    <Check className="w-3.5 h-3.5" />
-                  </button>
-                  <button onClick={() => setEditingFee(false)} className="text-muted-foreground hover:text-foreground">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
-                    {doctorProfile.consultationFee ? `AED ${doctorProfile.consultationFee}` : (lang === "ar" ? "رسوم الكشف: غير محددة" : "Fee: not set")}
-                  </span>
-                  {roles.includes("admin") && (
-                    <button onClick={startEditFee} className="ml-auto text-muted-foreground hover:text-foreground transition-colors">
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
           </div>
         )}
       </div>

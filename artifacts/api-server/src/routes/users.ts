@@ -58,7 +58,6 @@ const CompleteAdminOnboardingBody = z.object({
   longitude: z.string().optional(),
   adminName: z.string().optional(),
   specialization: z.string().optional(),
-  consultationFee: z.string().optional(),
 });
 
 const CompletePatientOnboardingBody = z.object({
@@ -128,7 +127,7 @@ router.post("/users/onboarding/admin", requireAuth, async (req, res): Promise<vo
     return;
   }
 
-  const { centerName, address, latitude, longitude, adminName, specialization, consultationFee } = parsed.data;
+  const { centerName, address, latitude, longitude, adminName, specialization } = parsed.data;
   const [center] = await db.insert(medicalCentersTable).values({
     name: centerName,
     address: address ?? null,
@@ -155,7 +154,6 @@ router.post("/users/onboarding/admin", requireAuth, async (req, res): Promise<vo
       firstName,
       lastName,
       specialization: specialization?.trim() || "General Practitioner",
-      consultationFee: consultationFee?.trim() || null,
       email: session.email,
       medicalCenterId: center.id,
     }).returning();
