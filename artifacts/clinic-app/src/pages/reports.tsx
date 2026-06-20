@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { apiFetch } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
+import { useRole } from "@/lib/role";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -710,6 +711,7 @@ const TABS = [
 export default function ReportsPage() {
   const { lang, isRTL } = useI18n();
   const { user } = useAuth();
+  const { hasRole } = useRole();
   const [, navigate] = useLocation();
 
   const [tab, setTab] = useState("overview");
@@ -720,31 +722,31 @@ export default function ReportsPage() {
   const { data: overview, isLoading: loadingOverview } = useQuery<OverviewData>({
     queryKey: ["reports-overview"],
     queryFn: () => apiFetch("/reports/overview"),
-    enabled: user?.role === "doctor",
+    enabled: hasRole("doctor"),
   });
 
   const { data: patients = [], isLoading: loadingPatients } = useQuery<PatientSummary[]>({
     queryKey: ["reports-patients"],
     queryFn: () => apiFetch("/reports/patient-summary"),
-    enabled: tab === "patients" && user?.role === "doctor",
+    enabled: tab === "patients" && hasRole("doctor"),
   });
 
   const { data: orders = [], isLoading: loadingOrders } = useQuery<MedicalOrder[]>({
     queryKey: ["reports-orders"],
     queryFn: () => apiFetch("/reports/orders"),
-    enabled: tab === "orders" && user?.role === "doctor",
+    enabled: tab === "orders" && hasRole("doctor"),
   });
 
   const { data: prescriptions = [], isLoading: loadingRx } = useQuery<Prescription[]>({
     queryKey: ["prescriptions"],
     queryFn: () => apiFetch("/prescriptions"),
-    enabled: tab === "medications" && user?.role === "doctor",
+    enabled: tab === "medications" && hasRole("doctor"),
   });
 
   const { data: consultations = [], isLoading: loadingConsults } = useQuery<Consultation[]>({
     queryKey: ["consultations"],
     queryFn: () => apiFetch("/consultations"),
-    enabled: tab === "encounters" && user?.role === "doctor",
+    enabled: tab === "encounters" && hasRole("doctor"),
   });
 
   const isTabLoading =
@@ -754,7 +756,7 @@ export default function ReportsPage() {
     (tab === "medications" && loadingRx) ||
     (tab === "encounters"  && loadingConsults);
 
-  if (user?.role !== "doctor") {
+  if (!hasRole("doctor")) {
     return (
       <div className="text-center py-12">
         <AlertCircle className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
