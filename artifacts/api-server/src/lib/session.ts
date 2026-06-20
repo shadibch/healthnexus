@@ -47,6 +47,7 @@ export interface SessionUser {
   aiAssistantEnabled: boolean;
   subscriptionPlan: string;
   mustChangePassword: boolean;
+  deactivated: boolean;
 }
 
 export async function attachSessionUser(
@@ -142,6 +143,7 @@ export async function attachSessionUser(
       aiAssistantEnabled: user.aiAssistantEnabled,
       subscriptionPlan: user.subscriptionPlan,
       mustChangePassword: user.mustChangePassword,
+      deactivated: user.deactivated,
     } satisfies SessionUser;
 
     next();
@@ -158,6 +160,10 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   const user = getSessionUser(req);
   if (!user) {
     res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  if (user.deactivated) {
+    res.status(403).json({ error: "ACCOUNT_DEACTIVATED" });
     return;
   }
   next();

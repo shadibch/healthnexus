@@ -25,7 +25,8 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Building2, Users, UserPlus, Loader2, CheckCircle, Clock, Sparkles,
   Database, Download, RotateCcw, Trash2, ShieldAlert, CalendarClock,
-  HardDriveDownload, RefreshCw, Eye, EyeOff, Copy, Check, Plus, Mail,
+  HardDriveDownload, RefreshCw, Eye, EyeOff, Copy, Check, Plus, Mail, X,
+  UserX, UserCheck,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,8 @@ interface StaffUser {
   name: string | null;
   email: string;
   role: string;
+  roles: string[];
+  deactivated: boolean;
   aiAssistantEnabled: boolean;
 }
 
@@ -371,14 +374,30 @@ export default function AdminPage() {
     onError: (e: Error) => toast({ title: "Failed to create account", description: e.message, variant: "destructive" }),
   });
 
+  const [addingRoleFor, setAddingRoleFor] = useState<number | null>(null);
+
+  const rolesMutation = useMutation({
+    mutationFn: ({ userId, roles }: { userId: number; roles: string[] }) =>
+      apiFetch(`/users/${userId}/roles`, { method: "PATCH", body: JSON.stringify({ roles }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["staff"] }),
+    onError: (e: Error) => toast({ title: "Failed to update roles", description: e.message, variant: "destructive" }),
+  });
+
+  const deactivateMutation = useMutation({
+    mutationFn: ({ userId, deactivated }: { userId: number; deactivated: boolean }) =>
+      apiFetch(`/users/${userId}/deactivate`, { method: "PATCH", body: JSON.stringify({ deactivated }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["staff"] }),
+    onError: (e: Error) => toast({ title: "Failed to update account status", description: e.message, variant: "destructive" }),
+  });
+
   const toggleAIMutation = useMutation({
     mutationFn: ({ userId, enabled }: { userId: number; enabled: boolean }) =>
       apiFetch("/users/ai-assistant", { method: "PATCH", body: JSON.stringify({ enabled, targetUserId: userId }) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["staff"] }),
   });
 
-  const activeStaff = data?.staff.filter(s => s.role !== "admin") ?? [];
-  const doctors = activeStaff.filter(s => s.role === "doctor");
+  const allStaff = data?.staff ?? [];
+  const doctors = allStaff.filter(s => (s.roles ?? []).includes("doctor"));
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -543,40 +562,148 @@ export default function AdminPage() {
         </Card>
       )}
 
-      {/* ── Staff Members ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="w-5 h-5 text-primary" /> Staff Members
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex items-center gap-2 text-muted-foreground text-sm">
-              <Loader2 className="w-4 h-4 animate-spin" /> Loading…
-            </div>
-          ) : activeStaff.length === 0 ? (
-            <p className="text-muted-foreground text-sm text-center py-6">No staff members yet. Send invitations above.</p>
-          ) : (
-            <div className="space-y-2">
-              {activeStaff.map(s => (
-                <div key={s.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
-                      {(s.name ?? s.email)[0].toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">{s.name ?? "—"}</p>
-                      <p className="text-xs text-muted-foreground">{s.email}</p>
-                    </div>
-                  </div>
-                  <Badge className={ROLE_COLORS[s.role] ?? ""}>{s.role}</Badge>
+      {/* ── Staff Management ── */}
+      {(() => {
+        const ALL_MANAGEABLE = ["admin", "doctor", "receptionist", "pharmacist"] as const;
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-primary" /> Staff Management
+              </CardTitle>
+              <CardDescription>
+                Add or remove roles for any team member, including yourself. You cannot deactivate your own account.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading…
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              ) : allStaff.length === 0 ? (
+                <p className="text-muted-foreground text-sm text-center py-6">No team members yet. Create accounts above.</p>
+              ) : (
+                <div className="space-y-3">
+                  {allStaff.map(s => {
+                    const isSelf = s.id === user?.userId;
+                    const userRoles: string[] = s.roles?.length > 0 ? s.roles : s.role ? [s.role] : [];
+                    const available = ALL_MANAGEABLE.filter(r => !userRoles.includes(r));
+                    return (
+                      <div
+                        key={s.id}
+                        className={cn(
+                          "p-4 rounded-lg border transition-colors",
+                          s.deactivated ? "border-dashed border-red-200 bg-red-50/30" : "border-border"
+                        )}
+                      >
+                        {/* Header row */}
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={cn(
+                              "w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0",
+                              s.deactivated ? "bg-red-100 text-red-500" : "bg-primary/10 text-primary"
+                            )}>
+                              {(s.name ?? s.email)[0].toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="font-medium text-sm">{s.name ?? "—"}</p>
+                                {isSelf && (
+                                  <Badge variant="outline" className="text-xs px-1.5 py-0">You</Badge>
+                                )}
+                                {s.deactivated && (
+                                  <Badge className="text-xs bg-red-100 text-red-600 px-1.5 py-0">Deactivated</Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground truncate">{s.email}</p>
+                            </div>
+                          </div>
+
+                          {/* Deactivate / Reactivate */}
+                          {!isSelf && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className={cn(
+                                "shrink-0 gap-1.5 text-xs h-8",
+                                s.deactivated
+                                  ? "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                  : "text-red-500 hover:text-red-600 hover:bg-red-50"
+                              )}
+                              onClick={() => deactivateMutation.mutate({ userId: s.id, deactivated: !s.deactivated })}
+                              disabled={deactivateMutation.isPending}
+                            >
+                              {s.deactivated
+                                ? <><UserCheck className="w-3.5 h-3.5" />Reactivate</>
+                                : <><UserX className="w-3.5 h-3.5" />Deactivate</>}
+                            </Button>
+                          )}
+                        </div>
+
+                        {/* Roles row */}
+                        <div className="mt-3 flex flex-wrap gap-2 items-center">
+                          {userRoles.map(role => (
+                            <Badge
+                              key={role}
+                              className={cn(ROLE_COLORS[role] ?? "bg-gray-100 text-gray-700", "gap-1 pr-1 text-xs")}
+                            >
+                              {role}
+                              <button
+                                className="rounded-sm p-0.5 hover:bg-black/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                title={userRoles.length === 1 ? "Cannot remove the last role" : `Remove ${role}`}
+                                disabled={userRoles.length === 1 || rolesMutation.isPending}
+                                onClick={() => rolesMutation.mutate({
+                                  userId: s.id,
+                                  roles: userRoles.filter(r => r !== role),
+                                })}
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </Badge>
+                          ))}
+
+                          {/* Add role inline */}
+                          {addingRoleFor === s.id ? (
+                            <Select
+                              open
+                              onValueChange={(role) => {
+                                rolesMutation.mutate({ userId: s.id, roles: [...userRoles, role] });
+                                setAddingRoleFor(null);
+                              }}
+                              onOpenChange={(open) => { if (!open) setAddingRoleFor(null); }}
+                            >
+                              <SelectTrigger className="h-7 w-36 text-xs">
+                                <SelectValue placeholder="Add role…" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {available.map(r => (
+                                  <SelectItem key={r} value={r} className="text-xs capitalize">{r}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            available.length > 0 && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs gap-1 border-dashed"
+                                onClick={() => setAddingRoleFor(s.id)}
+                                disabled={rolesMutation.isPending}
+                              >
+                                <Plus className="w-3 h-3" /> Add Role
+                              </Button>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* ── Pending Invitations ── */}
       {(data?.invites.length ?? 0) > 0 && (

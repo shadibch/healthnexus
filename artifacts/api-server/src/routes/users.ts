@@ -329,6 +329,94 @@ router.get("/users/staff", requireAuth, async (req, res): Promise<void> => {
   res.json({ staff, invites });
 });
 
+// ── PATCH /users/:id/roles ────────────────────────────────────────────────────
+const MANAGEABLE_ROLES = ["admin", "doctor", "receptionist", "pharmacist", "pharmacy"] as const;
+
+router.patch("/users/:id/roles", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
+  if (!session.roles.includes("admin") || !session.medicalCenterId) {
+    res.status(403).json({ error: "Admin only" });
+    return;
+  }
+
+  const targetId = parseInt(String(req.params.id));
+  if (isNaN(targetId)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+
+  const rawRoles: unknown = req.body.roles;
+  if (!Array.isArray(rawRoles) || rawRoles.length === 0) {
+    res.status(400).json({ error: "At least one role is required" });
+    return;
+  }
+  const roles = rawRoles.filter((r): r is string => typeof r === "string" && MANAGEABLE_ROLES.includes(r as any));
+  if (roles.length === 0) {
+    res.status(400).json({ error: "No valid roles provided" });
+    return;
+  }
+
+  const target = await db.query.usersTable.findFirst({ where: eq(usersTable.id, targetId) });
+  if (!target || target.medicalCenterId !== session.medicalCenterId) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  const primary = primaryRole(roles);
+  await db.update(usersTable).set({ role: primary, roles }).where(eq(usersTable.id, targetId));
+
+  // Auto-create doctor record when doctor role is newly added
+  const hadDoctor = Array.isArray(target.roles) && target.roles.includes("doctor");
+  const getsDoctor = roles.includes("doctor");
+  if (getsDoctor && !hadDoctor) {
+    const existing = await db.query.doctorsTable.findFirst({ where: eq(doctorsTable.userId, targetId) });
+    if (!existing) {
+      const nameParts = (target.name ?? target.email).split(/\s+/);
+      await db.insert(doctorsTable).values({
+        userId: target.id,
+        clerkId: target.clerkId,
+        firstName: nameParts[0] ?? target.email,
+        lastName: nameParts.slice(1).join(" ") || "-",
+        specialization: "General Practitioner",
+        email: target.email,
+        medicalCenterId: session.medicalCenterId,
+      });
+    }
+  }
+
+  res.json({ ok: true, roles, role: primary });
+});
+
+// ── PATCH /users/:id/deactivate ───────────────────────────────────────────────
+router.patch("/users/:id/deactivate", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
+  if (!session.roles.includes("admin") || !session.medicalCenterId) {
+    res.status(403).json({ error: "Admin only" });
+    return;
+  }
+
+  const targetId = parseInt(String(req.params.id));
+  if (isNaN(targetId)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+  if (targetId === session.userId) {
+    res.status(400).json({ error: "You cannot deactivate your own account" });
+    return;
+  }
+
+  const deactivated: boolean = !!req.body.deactivated;
+
+  const target = await db.query.usersTable.findFirst({ where: eq(usersTable.id, targetId) });
+  if (!target || target.medicalCenterId !== session.medicalCenterId) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  await db.update(usersTable).set({ deactivated }).where(eq(usersTable.id, targetId));
+  res.json({ ok: true, deactivated });
+});
+
 // ── PATCH /users/ai-assistant ─────────────────────────────────────────────────
 router.patch("/users/ai-assistant", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;

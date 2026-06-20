@@ -170,6 +170,21 @@ function AppRoutes() {
     );
   }
 
+  // Deactivated account
+  if (user.deactivated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <div className="text-center max-w-sm space-y-3">
+          <div className="text-5xl">🚫</div>
+          <h1 className="text-xl font-bold text-foreground">Account Deactivated</h1>
+          <p className="text-sm text-muted-foreground">
+            Your account has been deactivated by an administrator. Please contact your clinic admin for assistance.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // Must change temporary password before accessing anything else
   if (user.mustChangePassword) {
     return <ChangePasswordPage />;

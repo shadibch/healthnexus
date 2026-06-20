@@ -21,6 +21,7 @@ export interface AuthUser {
   aiAssistantEnabled: boolean;
   subscriptionPlan: string;
   mustChangePassword: boolean;
+  deactivated: boolean;
 }
 
 type AuthContextType = {
