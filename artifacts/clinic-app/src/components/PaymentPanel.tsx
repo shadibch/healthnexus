@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useClinicSettings } from "@/lib/clinic-settings";
 import {
   CreditCard,
   Banknote,
@@ -62,6 +63,7 @@ export default function PaymentPanel({ consultationId, current, activityTotal, l
   const [insuranceAmt, setInsuranceAmt] = useState(current.insuranceAmount ?? "");
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { currency } = useClinicSettings();
 
   const sc = STATUS_CONFIG[current.paymentStatus] ?? STATUS_CONFIG.unpaid;
   const ar = lang === "ar";
@@ -138,7 +140,7 @@ export default function PaymentPanel({ consultationId, current, activityTotal, l
             {/* Paid amount */}
             {current.paidAmount && parseFloat(current.paidAmount) > 0 && (
               <span className="text-xs font-semibold text-emerald-700">
-                {ar ? "المدفوع:" : "Paid:"} AED {parseFloat(current.paidAmount).toFixed(2)}
+                {ar ? "المدفوع:" : "Paid:"} {currency} {parseFloat(current.paidAmount).toFixed(2)}
               </span>
             )}
 
@@ -153,7 +155,7 @@ export default function PaymentPanel({ consultationId, current, activityTotal, l
                 )}
                 {current.insuranceAmount && (
                   <span className="text-xs text-blue-700">
-                    {ar ? "التأمين:" : "Insurance:"} AED {parseFloat(current.insuranceAmount).toFixed(2)}
+                    {ar ? "التأمين:" : "Insurance:"} {currency} {parseFloat(current.insuranceAmount).toFixed(2)}
                   </span>
                 )}
               </div>
@@ -162,7 +164,7 @@ export default function PaymentPanel({ consultationId, current, activityTotal, l
             {/* Activity total */}
             {activityTotal > 0 && (
               <span className={cn("text-xs text-muted-foreground", isRTL ? "mr-auto" : "ml-auto")}>
-                {ar ? "إجمالي الخدمات:" : "Total services:"} <span className="font-semibold text-foreground">AED {activityTotal.toFixed(2)}</span>
+                {ar ? "إجمالي الخدمات:" : "Total services:"} <span className="font-semibold text-foreground">{currency} {activityTotal.toFixed(2)}</span>
               </span>
             )}
           </div>
@@ -184,7 +186,7 @@ export default function PaymentPanel({ consultationId, current, activityTotal, l
             {activityTotal > 0 && (
               <div className="rounded-lg bg-muted/40 border border-border px-4 py-3 text-sm flex justify-between items-center">
                 <span className="text-muted-foreground">{ar ? "إجمالي الخدمات" : "Total services"}</span>
-                <span className="font-bold text-base">AED {activityTotal.toFixed(2)}</span>
+                <span className="font-bold text-base">{currency} {activityTotal.toFixed(2)}</span>
               </div>
             )}
 

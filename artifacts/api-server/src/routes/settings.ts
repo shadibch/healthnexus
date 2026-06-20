@@ -19,6 +19,7 @@ function rowToJson(s: SettingsRow) {
     country: s.country ?? null,
     latitude:  s.latitude  != null ? parseFloat(s.latitude)  : null,
     longitude: s.longitude != null ? parseFloat(s.longitude) : null,
+    currency: s.currency ?? "AED",
   };
 }
 
@@ -30,6 +31,7 @@ const EMPTY_DEFAULTS = {
   country: null,
   latitude: null,
   longitude: null,
+  currency: "AED",
 };
 
 // ── GET /settings — public, no auth required (login page needs it too) ────────
@@ -56,6 +58,7 @@ router.patch(
       country,
       latitude,
       longitude,
+      currency,
     } = req.body as {
       clinicName?: string;
       logoBase64?: string | null;
@@ -64,6 +67,7 @@ router.patch(
       country?: string | null;
       latitude?: number | null;
       longitude?: number | null;
+      currency?: string;
     };
 
     // — Validate name
@@ -102,6 +106,12 @@ router.patch(
       }
     }
 
+    // — Validate currency
+    if (currency !== undefined && (typeof currency !== "string" || currency.trim().length === 0)) {
+      res.status(400).json({ error: "currency must be a non-empty string" });
+      return;
+    }
+
     const [existing] = await db.select().from(clinicSettingsTable).limit(1);
 
     const toSet = {
@@ -112,6 +122,7 @@ router.patch(
       ...(country     !== undefined ? { country: country?.trim() ?? null } : {}),
       ...(latitude    !== undefined ? { latitude:  latitude  != null ? String(latitude)  : null } : {}),
       ...(longitude   !== undefined ? { longitude: longitude != null ? String(longitude) : null } : {}),
+      ...(currency    !== undefined ? { currency: currency.trim() } : {}),
     };
 
     if (existing) {
@@ -132,6 +143,7 @@ router.patch(
           country: country?.trim() ?? null,
           latitude:  latitude  != null ? String(latitude)  : null,
           longitude: longitude != null ? String(longitude) : null,
+          currency: currency?.trim() ?? "AED",
         })
         .returning();
       res.json(rowToJson(inserted));

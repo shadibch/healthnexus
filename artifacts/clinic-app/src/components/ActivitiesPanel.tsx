@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useClinicSettings } from "@/lib/clinic-settings";
 
 interface HaadCode {
   code: string;
@@ -76,6 +77,7 @@ function AddActivityDialog({
   const qc = useQueryClient();
   const { toast } = useToast();
   const { lang, isRTL } = useI18n();
+  const { currency } = useClinicSettings();
   const [q, setQ] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [selected, setSelected] = useState<HaadCode | null>(null);
@@ -134,7 +136,7 @@ function AddActivityDialog({
           <div className="px-5 py-3 bg-primary/5 border-b flex items-center justify-between gap-3">
             <div className={cn("flex-1 min-w-0", isRTL && "text-right")}>
               <p className="text-sm font-semibold">{selected.code} — {isRTL ? selected.descriptionAr : selected.description}</p>
-              <p className="text-xs text-muted-foreground">AED {selected.unitPrice.toFixed(2)} per unit</p>
+              <p className="text-xs text-muted-foreground">{currency} {selected.unitPrice.toFixed(2)} per unit</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <button
@@ -151,7 +153,7 @@ function AddActivityDialog({
                 <Plus className="w-3.5 h-3.5" />
               </button>
               <Badge variant="secondary" className="font-mono text-sm">
-                AED {(selected.unitPrice * qty).toFixed(2)}
+                {currency} {(selected.unitPrice * qty).toFixed(2)}
               </Badge>
               <Button size="sm" onClick={() => addMutation.mutate()} disabled={addMutation.isPending} className="gap-1">
                 {addMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
@@ -246,7 +248,7 @@ function AddActivityDialog({
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="text-sm font-bold text-emerald-700">AED {item.unitPrice.toFixed(2)}</p>
+                      <p className="text-sm font-bold text-emerald-700">{currency} {item.unitPrice.toFixed(2)}</p>
                       <ChevronRight className={cn("w-3.5 h-3.5 text-muted-foreground mx-auto mt-0.5", isSelected && "text-primary")} />
                     </div>
                   </button>
@@ -270,6 +272,7 @@ export default function ActivitiesPanel({ consultationId, isCompleted }: Activit
   const qc = useQueryClient();
   const { toast } = useToast();
   const { lang, isRTL } = useI18n();
+  const { currency } = useClinicSettings();
   const [addOpen, setAddOpen] = useState(false);
 
   const { data: activities = [], isLoading } = useQuery<EncounterActivity[]>({
@@ -384,19 +387,19 @@ export default function ActivitiesPanel({ consultationId, isCompleted }: Activit
                               <Plus className="w-3 h-3" />
                             </button>
                             <span className="text-xs text-muted-foreground">
-                              × AED {parseFloat(act.unitPrice).toFixed(2)}
+                              × {currency} {parseFloat(act.unitPrice).toFixed(2)}
                             </span>
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">
-                            {act.quantity} × AED {parseFloat(act.unitPrice).toFixed(2)}
+                            {act.quantity} × {currency} {parseFloat(act.unitPrice).toFixed(2)}
                           </span>
                         )}
                       </div>
                     </div>
                     <div className={cn("shrink-0 flex flex-col items-end gap-1.5", isRTL && "items-start")}>
                       <span className="font-bold text-sm text-emerald-800">
-                        AED {parseFloat(act.total).toFixed(2)}
+                        {currency} {parseFloat(act.total).toFixed(2)}
                       </span>
                       {!isCompleted && (
                         <button
@@ -428,7 +431,7 @@ export default function ActivitiesPanel({ consultationId, isCompleted }: Activit
                   </span>
                 </div>
                 <span className="text-lg font-bold text-emerald-800">
-                  AED {grandTotal.toFixed(2)}
+                  {currency} {grandTotal.toFixed(2)}
                 </span>
               </div>
             </div>

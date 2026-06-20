@@ -15,6 +15,13 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
@@ -62,6 +69,7 @@ function FeeScheduleCard({ lang, isRTL }: { lang: string; isRTL: boolean }) {
   const ar = lang === "ar";
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { currency } = useClinicSettings();
 
   const { data: categories, isLoading } = useQuery<DoctorCategory[]>({
     queryKey: ["fee-schedule"],
@@ -184,7 +192,7 @@ function FeeScheduleCard({ lang, isRTL }: { lang: string; isRTL: boolean }) {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs">{tr("Fee (AED)", "الرسم (AED)")}</Label>
+                        <Label className="text-xs">{tr(`Fee (${currency})`, `الرسم (${currency})`)}</Label>
                         <Input
                           type="number"
                           min="0"
@@ -238,7 +246,7 @@ function FeeScheduleCard({ lang, isRTL }: { lang: string; isRTL: boolean }) {
                     </div>
                     <div className={cn("flex items-center gap-3 shrink-0", isRTL && "flex-row-reverse")}>
                       <Badge variant="outline" className="text-emerald-700 border-emerald-300 font-mono font-semibold text-xs">
-                        AED {parseFloat(cat.consultationFee).toFixed(2)}
+                        {currency} {parseFloat(cat.consultationFee).toFixed(2)}
                       </Badge>
                       <div className={cn("flex items-center gap-1", isRTL && "flex-row-reverse")}>
                         <Button
@@ -286,7 +294,7 @@ function FeeScheduleCard({ lang, isRTL }: { lang: string; isRTL: boolean }) {
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">{tr("Fee (AED) *", "الرسم (AED) *")}</Label>
+                <Label className="text-xs">{tr(`Fee (${currency}) *`, `الرسم (${currency}) *`)}</Label>
                 <Input
                   type="number"
                   min="0"
@@ -361,6 +369,7 @@ export default function SettingsPage() {
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError]   = useState("");
   const [geoSuccess, setGeoSuccess] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState("AED");
 
   useEffect(() => {
     if (!saved.isLoading) {
@@ -369,6 +378,7 @@ export default function SettingsPage() {
       if (saved.address   != null && address   === "") setAddress(saved.address);
       if (saved.city      != null && city      === "") setCity(saved.city);
       if (saved.country   != null && country   === "") setCountry(saved.country);
+      setSelectedCurrency(saved.currency ?? "AED");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saved.isLoading]);
@@ -490,6 +500,7 @@ export default function SettingsPage() {
       country:    country.trim()  || null,
       latitude:   latNum,
       longitude:  lonNum,
+      currency:   selectedCurrency,
     };
     if (logoChanged) payload.logoBase64 = logoPreview;
 
@@ -740,6 +751,62 @@ export default function SettingsPage() {
               </a>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Currency */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <CircleDollarSign className="w-4 h-4 text-primary" />
+            {tr("Currency", "العملة")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            {tr(
+              "The currency shown on all fees, billing, and insurance claims throughout the system.",
+              "العملة التي تظهر على جميع الرسوم والفواتير ومطالبات التأمين في النظام."
+            )}
+          </p>
+          <div className="max-w-xs">
+            <Select value={selectedCurrency} onValueChange={setSelectedCurrency}>
+              <SelectTrigger className="text-sm font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[
+                  { code: "AED", name: "UAE Dirham" },
+                  { code: "SAR", name: "Saudi Riyal" },
+                  { code: "QAR", name: "Qatari Riyal" },
+                  { code: "KWD", name: "Kuwaiti Dinar" },
+                  { code: "BHD", name: "Bahraini Dinar" },
+                  { code: "OMR", name: "Omani Rial" },
+                  { code: "JOD", name: "Jordanian Dinar" },
+                  { code: "EGP", name: "Egyptian Pound" },
+                  { code: "MAD", name: "Moroccan Dirham" },
+                  { code: "NGN", name: "Nigerian Naira" },
+                  { code: "KES", name: "Kenyan Shilling" },
+                  { code: "ZAR", name: "South African Rand" },
+                  { code: "GHS", name: "Ghanaian Cedi" },
+                  { code: "TZS", name: "Tanzanian Shilling" },
+                  { code: "USD", name: "US Dollar" },
+                  { code: "EUR", name: "Euro" },
+                  { code: "GBP", name: "British Pound" },
+                  { code: "PKR", name: "Pakistani Rupee" },
+                  { code: "INR", name: "Indian Rupee" },
+                ].map(({ code, name }) => (
+                  <SelectItem key={code} value={code} className="font-mono">
+                    <span className="font-bold">{code}</span>
+                    <span className="text-muted-foreground ml-2 font-sans font-normal">— {name}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {tr("Current:", "الحالي:")} <span className="font-mono font-bold text-foreground">{saved.currency}</span>
+          </p>
         </CardContent>
       </Card>
 

@@ -206,6 +206,7 @@ function FeeOverrideDialog({
   const qc = useQueryClient();
   const { toast } = useToast();
   const { lang } = useI18n();
+  const { currency } = useClinicSettings();
   const [newFee, setNewFee] = useState(currentFee ?? "");
   const [reason, setReason] = useState("");
 
@@ -243,7 +244,7 @@ function FeeOverrideDialog({
               : "Warning: All fee overrides are logged with your name and timestamp for audit purposes."}
           </div>
           <div>
-            <Label className="text-xs">{lang === "ar" ? "الرسم الجديد (AED)" : "New Fee (AED)"}</Label>
+            <Label className="text-xs">{lang === "ar" ? `الرسم الجديد (${currency})` : `New Fee (${currency})`}</Label>
             <Input
               type="number"
               min="0"
@@ -1350,7 +1351,7 @@ export default function EncounterPage() {
                         )}
                         {encounter.consultationFeeApplied ? (
                           <p className="text-xl font-bold text-emerald-700 font-mono">
-                            AED {parseFloat(encounter.consultationFeeApplied).toFixed(2)}
+                            {clinic.currency} {parseFloat(encounter.consultationFeeApplied).toFixed(2)}
                           </p>
                         ) : (
                           <p className="text-sm text-muted-foreground italic">

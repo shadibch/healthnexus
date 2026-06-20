@@ -11,6 +11,7 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   // GPS coordinates — stored as NUMERIC(10,6) for ±90 / ±180 with 6 decimal places
   latitude: numeric("latitude", { precision: 10, scale: 6 }),
   longitude: numeric("longitude", { precision: 10, scale: 6 }),
+  currency: text("currency").notNull().default("AED"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow()

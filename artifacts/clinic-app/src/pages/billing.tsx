@@ -63,7 +63,7 @@ function firstOfMonth() {
 export default function BillingPage() {
   const { lang, isRTL } = useI18n();
   const ar = lang === "ar";
-  const { clinicName, logoBase64 } = useClinicSettings();
+  const { clinicName, logoBase64, currency } = useClinicSettings();
   const printRef = useRef<HTMLDivElement>(null);
 
   const [from, setFrom] = useState(firstOfMonth());
@@ -130,7 +130,7 @@ export default function BillingPage() {
                   {ar ? `${claims.length} مطالبة` : `${claims.length} claim${claims.length !== 1 ? "s" : ""}`}
                   {claims.length > 0 && (
                     <span className="ml-2 text-amber-700 font-semibold">
-                      · AED {claims.reduce((s, c) => s + parseFloat(c.insuranceAmount ?? "0"), 0).toFixed(2)}
+                      · {currency} {claims.reduce((s, c) => s + parseFloat(c.insuranceAmount ?? "0"), 0).toFixed(2)}
                     </span>
                   )}
                 </span>
@@ -213,19 +213,19 @@ export default function BillingPage() {
                         {claim.consultationFeeApplied && (
                           <span className="flex items-center gap-1 text-emerald-700 font-medium">
                             <CircleDollarSign className="w-3 h-3" />
-                            {ar ? "رسم الكشف:" : "Consult fee:"} AED {parseFloat(claim.consultationFeeApplied).toFixed(2)}
+                            {ar ? "رسم الكشف:" : "Consult fee:"} {currency} {parseFloat(claim.consultationFeeApplied).toFixed(2)}
                           </span>
                         )}
                         <span className="text-muted-foreground">
-                          {ar ? "إجمالي الخدمات:" : "Services:"} AED {parseFloat(claim.activityTotal).toFixed(2)}
+                          {ar ? "إجمالي الخدمات:" : "Services:"} {currency} {parseFloat(claim.activityTotal).toFixed(2)}
                         </span>
                         {claim.paidAmount && (
                           <span className="text-emerald-700">
-                            {ar ? "مدفوع من المريض:" : "Patient paid:"} AED {parseFloat(claim.paidAmount).toFixed(2)}
+                            {ar ? "مدفوع من المريض:" : "Patient paid:"} {currency} {parseFloat(claim.paidAmount).toFixed(2)}
                           </span>
                         )}
                         <span className="font-semibold text-blue-700">
-                          {ar ? "يُطالب التأمين:" : "Insurance claim:"} AED {parseFloat(claim.insuranceAmount ?? "0").toFixed(2)}
+                          {ar ? "يُطالب التأمين:" : "Insurance claim:"} {currency} {parseFloat(claim.insuranceAmount ?? "0").toFixed(2)}
                         </span>
                       </div>
                     </div>
@@ -288,7 +288,7 @@ export default function BillingPage() {
                         </p>
                         {claim.consultationFeeApplied && (
                           <p className="text-xs font-medium text-emerald-700 mt-0.5">
-                            {ar ? "رسم الكشف:" : "Consultation Fee:"} AED {parseFloat(claim.consultationFeeApplied).toFixed(2)}
+                            {ar ? "رسم الكشف:" : "Consultation Fee:"} {currency} {parseFloat(claim.consultationFeeApplied).toFixed(2)}
                           </p>
                         )}
                       </div>
@@ -308,8 +308,8 @@ export default function BillingPage() {
                             <th className="text-left px-4 py-2 font-semibold text-slate-600">Code</th>
                             <th className="text-left px-4 py-2 font-semibold text-slate-600">Description</th>
                             <th className="text-center px-4 py-2 font-semibold text-slate-600">Qty</th>
-                            <th className="text-right px-4 py-2 font-semibold text-slate-600">Unit (AED)</th>
-                            <th className="text-right px-4 py-2 font-semibold text-slate-600">Total (AED)</th>
+                            <th className="text-right px-4 py-2 font-semibold text-slate-600">Unit ({currency})</th>
+                            <th className="text-right px-4 py-2 font-semibold text-slate-600">Total ({currency})</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -343,7 +343,7 @@ export default function BillingPage() {
                                 {ar ? "مدفوع من المريض:" : "Patient paid:"}
                               </td>
                               <td className="px-4 py-1 text-right text-emerald-700 font-bold">
-                                − AED {parseFloat(claim.paidAmount).toFixed(2)}
+                                − {currency} {parseFloat(claim.paidAmount).toFixed(2)}
                               </td>
                             </tr>
                           )}
@@ -352,7 +352,7 @@ export default function BillingPage() {
                               {ar ? "المبلغ المطالب من التأمين:" : "Insurance claim amount:"}
                             </td>
                             <td className="px-4 py-2 text-right text-blue-800 font-bold text-sm">
-                              AED {parseFloat(claim.insuranceAmount ?? "0").toFixed(2)}
+                              {currency} {parseFloat(claim.insuranceAmount ?? "0").toFixed(2)}
                             </td>
                           </tr>
                         </tfoot>
@@ -367,8 +367,8 @@ export default function BillingPage() {
                             <th className="text-left px-4 py-2 font-semibold text-slate-600">Code</th>
                             <th className="text-left px-4 py-2 font-semibold text-slate-600">Description</th>
                             <th className="text-center px-4 py-2 font-semibold text-slate-600">Qty</th>
-                            <th className="text-right px-4 py-2 font-semibold text-slate-600">Unit (AED)</th>
-                            <th className="text-right px-4 py-2 font-semibold text-slate-600">Total (AED)</th>
+                            <th className="text-right px-4 py-2 font-semibold text-slate-600">Unit ({currency})</th>
+                            <th className="text-right px-4 py-2 font-semibold text-slate-600">Total ({currency})</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -389,7 +389,7 @@ export default function BillingPage() {
                                 {ar ? "مدفوع من المريض:" : "Patient paid:"}
                               </td>
                               <td className="px-4 py-1 text-right text-emerald-700 font-bold">
-                                − AED {parseFloat(claim.paidAmount).toFixed(2)}
+                                − {currency} {parseFloat(claim.paidAmount).toFixed(2)}
                               </td>
                             </tr>
                           )}
@@ -398,7 +398,7 @@ export default function BillingPage() {
                               {ar ? "المبلغ المطالب من التأمين:" : "Insurance claim amount:"}
                             </td>
                             <td className="px-4 py-2 text-right text-blue-800 font-bold text-sm">
-                              AED {parseFloat(claim.insuranceAmount ?? "0").toFixed(2)}
+                              {currency} {parseFloat(claim.insuranceAmount ?? "0").toFixed(2)}
                             </td>
                           </tr>
                         </tfoot>
@@ -416,7 +416,7 @@ export default function BillingPage() {
                   <p className="font-bold text-slate-800">
                     {ar ? "إجمالي المطالبات لـ" : "Total claims for"} {company}
                   </p>
-                  <p className="text-xl font-bold text-blue-800">AED {companyTotal.toFixed(2)}</p>
+                  <p className="text-xl font-bold text-blue-800">{currency} {companyTotal.toFixed(2)}</p>
                 </div>
               </div>
             );
@@ -441,7 +441,7 @@ export default function BillingPage() {
                       <ShieldCheck className="w-4 h-4" />
                       {company}
                     </CardTitle>
-                    <span className="text-sm font-bold text-blue-800">AED {companyTotal.toFixed(2)}</span>
+                    <span className="text-sm font-bold text-blue-800">{currency} {companyTotal.toFixed(2)}</span>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -469,21 +469,21 @@ export default function BillingPage() {
                           {claim.consultationFeeApplied && (
                             <p className="text-xs text-emerald-700 font-medium flex items-center gap-1">
                               <CircleDollarSign className="w-3 h-3" />
-                              {ar ? "رسم الكشف:" : "Consult fee:"} AED {parseFloat(claim.consultationFeeApplied).toFixed(2)}
+                              {ar ? "رسم الكشف:" : "Consult fee:"} {currency} {parseFloat(claim.consultationFeeApplied).toFixed(2)}
                             </p>
                           )}
                           <p className="text-xs text-muted-foreground">
-                            {claim.activities.length} {ar ? "خدمة" : "activities"} · AED {parseFloat(claim.activityTotal).toFixed(2)}
+                            {claim.activities.length} {ar ? "خدمة" : "activities"} · {currency} {parseFloat(claim.activityTotal).toFixed(2)}
                           </p>
                         </div>
                         <div className={cn("text-right shrink-0", isRTL && "text-left")}>
                           {claim.paidAmount && (
                             <p className="text-xs text-emerald-700">
-                              {ar ? "مريض:" : "Patient:"} AED {parseFloat(claim.paidAmount).toFixed(2)}
+                              {ar ? "مريض:" : "Patient:"} {currency} {parseFloat(claim.paidAmount).toFixed(2)}
                             </p>
                           )}
                           <p className="text-sm font-bold text-blue-700">
-                            {ar ? "تأمين:" : "Insurance:"} AED {parseFloat(claim.insuranceAmount ?? "0").toFixed(2)}
+                            {ar ? "تأمين:" : "Insurance:"} {currency} {parseFloat(claim.insuranceAmount ?? "0").toFixed(2)}
                           </p>
                         </div>
                       </div>
@@ -497,7 +497,7 @@ export default function BillingPage() {
             <span className="text-sm text-muted-foreground">
               {ar ? "الإجمالي الكلي للتأمين:" : "Grand total to insurance:"}
             </span>
-            <span className="text-lg font-bold text-blue-800">AED {grandInsurance.toFixed(2)}</span>
+            <span className="text-lg font-bold text-blue-800">{currency} {grandInsurance.toFixed(2)}</span>
           </div>
         </div>
       )}

@@ -11,6 +11,8 @@ export interface ClinicSettings {
   // GPS coordinates — null until configured; ready to pass into Google Maps / embed links
   latitude: number | null;
   longitude: number | null;
+  // Currency code used for all monetary displays (e.g. "AED", "SAR", "USD")
+  currency: string;
 }
 
 const DEFAULTS: ClinicSettings = {
@@ -21,6 +23,7 @@ const DEFAULTS: ClinicSettings = {
   country: null,
   latitude: null,
   longitude: null,
+  currency: "AED",
 };
 
 export const CLINIC_SETTINGS_QUERY_KEY = ["clinic-settings"] as const;

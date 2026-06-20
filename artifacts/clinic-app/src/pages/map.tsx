@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import type L from "leaflet";
+import { useClinicSettings } from "@/lib/clinic-settings";
 
 const ABU_DHABI: [number, number] = [24.4539, 54.3773];
 
@@ -59,6 +60,7 @@ function kmLabel(km: number, ar: boolean) {
 export default function MapPage() {
   const { lang, isRTL } = useI18n();
   const { user } = useAuth();
+  const { currency } = useClinicSettings();
   const ar = lang === "ar";
 
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
@@ -225,7 +227,7 @@ export default function MapPage() {
               ${d.clinic_address ? `<span style="font-size:11px">📍 ${d.clinic_address}</span><br/>` : ""}
               ${d.phone ? `<span style="font-size:11px">📞 ${d.phone}</span><br/>` : ""}
               <b style="color:#059669">${kmLabel(d.distance_km, ar)} away</b>
-              ${d.consultation_fee ? ` · AED ${d.consultation_fee}` : ""}
+              ${d.consultation_fee ? ` · ${currency} ${d.consultation_fee}` : ""}
             </div>`
           );
         });
@@ -390,7 +392,7 @@ export default function MapPage() {
                               {kmLabel(d.distance_km, ar)}
                             </span>
                             {d.consultation_fee && (
-                              <span className="text-xs text-muted-foreground">AED {d.consultation_fee}</span>
+                              <span className="text-xs text-muted-foreground">{currency} {d.consultation_fee}</span>
                             )}
                           </div>
                           {d.phone && (
