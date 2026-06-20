@@ -16,7 +16,6 @@ import {
   Printer,
   User,
   Stethoscope,
-  Calendar,
   CircleDollarSign,
 } from "lucide-react";
 
@@ -38,6 +37,8 @@ interface Claim {
   patientNationalId: string | null;
   patientPhone: string | null;
   doctorName: string | null;
+  doctorCategory: string | null;
+  consultationFeeApplied: string | null;
   encounterType: string;
   diagnosis: string | null;
   chiefComplaint: string | null;
@@ -82,7 +83,6 @@ export default function BillingPage() {
     setSelectedClaims((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
 
   const selectedData = claims?.filter((c) => selectedClaims.includes(c.id)) ?? [];
-
   const grandInsurance = selectedData.reduce((s, c) => s + parseFloat(c.insuranceAmount ?? "0"), 0);
 
   const handlePrint = () => window.print();
@@ -149,11 +149,7 @@ export default function BillingPage() {
               {ar ? "مطالبات التأمين المعلقة" : "Pending Insurance Claims"}
             </CardTitle>
             {allIds.length > 0 && (
-              <button
-                type="button"
-                onClick={toggleAll}
-                className="text-xs text-primary hover:underline"
-              >
+              <button type="button" onClick={toggleAll} className="text-xs text-primary hover:underline">
                 {allSelected ? (ar ? "إلغاء التحديد" : "Deselect all") : (ar ? "تحديد الكل" : "Select all")}
               </button>
             )}
@@ -201,8 +197,25 @@ export default function BillingPage() {
                           {new Date(claim.createdAt).toLocaleDateString(isRTL ? "ar-AE" : "en-AE")}
                         </span>
                       </div>
-                      <p className="text-xs text-muted-foreground">{claim.doctorName} · {claim.diagnosis ?? "—"}</p>
+                      <div className={cn("flex items-center gap-2 flex-wrap text-xs text-muted-foreground", isRTL && "flex-row-reverse")}>
+                        <span className="flex items-center gap-1">
+                          <Stethoscope className="w-3 h-3" />
+                          {claim.doctorName}
+                        </span>
+                        {claim.doctorCategory && (
+                          <Badge variant="secondary" className="text-xs font-normal py-0">
+                            {claim.doctorCategory}
+                          </Badge>
+                        )}
+                        {claim.diagnosis && <span>· {claim.diagnosis}</span>}
+                      </div>
                       <div className={cn("flex items-center gap-3 flex-wrap text-xs", isRTL && "flex-row-reverse")}>
+                        {claim.consultationFeeApplied && (
+                          <span className="flex items-center gap-1 text-emerald-700 font-medium">
+                            <CircleDollarSign className="w-3 h-3" />
+                            {ar ? "رسم الكشف:" : "Consult fee:"} AED {parseFloat(claim.consultationFeeApplied).toFixed(2)}
+                          </span>
+                        )}
                         <span className="text-muted-foreground">
                           {ar ? "إجمالي الخدمات:" : "Services:"} AED {parseFloat(claim.activityTotal).toFixed(2)}
                         </span>
@@ -245,12 +258,8 @@ export default function BillingPage() {
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-semibold text-slate-700">INSURANCE INVOICE</p>
-                      <p className="text-xs text-slate-500">
-                        Period: {from} — {to}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        Printed: {new Date().toLocaleDateString("en-AE")}
-                      </p>
+                      <p className="text-xs text-slate-500">Period: {from} — {to}</p>
+                      <p className="text-xs text-slate-500">Printed: {new Date().toLocaleDateString("en-AE")}</p>
                     </div>
                   </div>
                   <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
@@ -260,7 +269,7 @@ export default function BillingPage() {
                 </div>
 
                 {/* Claims */}
-                {companyClaims.map((claim, idx) => (
+                {companyClaims.map((claim) => (
                   <div key={claim.id} className="mb-8 border border-slate-200 rounded-lg overflow-hidden">
                     {/* Claim header */}
                     <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-start">
@@ -271,9 +280,17 @@ export default function BillingPage() {
                           {" "}{ar ? "الهاتف:" : "Phone:"} {claim.patientPhone ?? "—"}
                         </p>
                         <p className="text-xs text-slate-500">
-                          {ar ? "الطبيب:" : "Doctor:"} {claim.doctorName} ·
-                          {" "}{ar ? "التاريخ:" : "Date:"} {new Date(claim.createdAt).toLocaleDateString("en-AE")}
+                          {ar ? "الطبيب:" : "Doctor:"} {claim.doctorName}
+                          {claim.doctorCategory && (
+                            <span className="ml-1 text-slate-400">({claim.doctorCategory})</span>
+                          )}
+                          {" "}· {ar ? "التاريخ:" : "Date:"} {new Date(claim.createdAt).toLocaleDateString("en-AE")}
                         </p>
+                        {claim.consultationFeeApplied && (
+                          <p className="text-xs font-medium text-emerald-700 mt-0.5">
+                            {ar ? "رسم الكشف:" : "Consultation Fee:"} AED {parseFloat(claim.consultationFeeApplied).toFixed(2)}
+                          </p>
+                        )}
                       </div>
                       <div className="text-right">
                         <p className="text-xs font-semibold text-slate-600">{ar ? "رقم السجل:" : "Encounter #"}{claim.id}</p>
@@ -283,8 +300,67 @@ export default function BillingPage() {
                       </div>
                     </div>
 
-                    {/* Activities table */}
-                    {claim.activities.length > 0 ? (
+                    {/* Consultation fee line item (always shown as first row) */}
+                    {claim.consultationFeeApplied && (
+                      <table className="w-full text-xs border-b border-slate-100">
+                        <thead>
+                          <tr className="bg-slate-100 border-b border-slate-200">
+                            <th className="text-left px-4 py-2 font-semibold text-slate-600">Code</th>
+                            <th className="text-left px-4 py-2 font-semibold text-slate-600">Description</th>
+                            <th className="text-center px-4 py-2 font-semibold text-slate-600">Qty</th>
+                            <th className="text-right px-4 py-2 font-semibold text-slate-600">Unit (AED)</th>
+                            <th className="text-right px-4 py-2 font-semibold text-slate-600">Total (AED)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="bg-emerald-50/40">
+                            <td className="px-4 py-2 font-mono text-slate-500 text-xs">CONSULT</td>
+                            <td className="px-4 py-2 text-slate-800 font-medium">
+                              {ar ? "رسم الكشف" : "Consultation Fee"}
+                              {claim.doctorCategory && (
+                                <span className="ml-1 text-slate-500 font-normal">— {claim.doctorCategory}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2 text-center">1</td>
+                            <td className="px-4 py-2 text-right">{parseFloat(claim.consultationFeeApplied).toFixed(2)}</td>
+                            <td className="px-4 py-2 text-right font-semibold">{parseFloat(claim.consultationFeeApplied).toFixed(2)}</td>
+                          </tr>
+                          {/* HAAD activity rows */}
+                          {claim.activities.map((a) => (
+                            <tr key={a.id} className="border-t border-slate-100">
+                              <td className="px-4 py-2 font-mono text-slate-600">{a.activityCode}</td>
+                              <td className="px-4 py-2 text-slate-800">{a.description}</td>
+                              <td className="px-4 py-2 text-center">{a.quantity}</td>
+                              <td className="px-4 py-2 text-right">{parseFloat(a.unitPrice).toFixed(2)}</td>
+                              <td className="px-4 py-2 text-right font-semibold">{parseFloat(a.total).toFixed(2)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-slate-50 border-t border-slate-200">
+                          {claim.paidAmount && parseFloat(claim.paidAmount) > 0 && (
+                            <tr>
+                              <td colSpan={4} className="px-4 py-1 text-right text-xs text-emerald-700 font-semibold">
+                                {ar ? "مدفوع من المريض:" : "Patient paid:"}
+                              </td>
+                              <td className="px-4 py-1 text-right text-emerald-700 font-bold">
+                                − AED {parseFloat(claim.paidAmount).toFixed(2)}
+                              </td>
+                            </tr>
+                          )}
+                          <tr className="border-t-2 border-blue-200">
+                            <td colSpan={4} className="px-4 py-2 text-right text-sm font-bold text-blue-800">
+                              {ar ? "المبلغ المطالب من التأمين:" : "Insurance claim amount:"}
+                            </td>
+                            <td className="px-4 py-2 text-right text-blue-800 font-bold text-sm">
+                              AED {parseFloat(claim.insuranceAmount ?? "0").toFixed(2)}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    )}
+
+                    {/* Activities-only (no consult fee) */}
+                    {!claim.consultationFeeApplied && claim.activities.length > 0 && (
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="bg-slate-100 border-b border-slate-200">
@@ -307,12 +383,6 @@ export default function BillingPage() {
                           ))}
                         </tbody>
                         <tfoot className="bg-slate-50">
-                          <tr>
-                            <td colSpan={4} className="px-4 py-2 text-right text-xs font-semibold text-slate-600">
-                              {ar ? "إجمالي الخدمات:" : "Activity Total:"}
-                            </td>
-                            <td className="px-4 py-2 text-right font-bold">AED {parseFloat(claim.activityTotal).toFixed(2)}</td>
-                          </tr>
                           {claim.paidAmount && parseFloat(claim.paidAmount) > 0 && (
                             <tr>
                               <td colSpan={4} className="px-4 py-1 text-right text-xs text-emerald-700 font-semibold">
@@ -333,7 +403,9 @@ export default function BillingPage() {
                           </tr>
                         </tfoot>
                       </table>
-                    ) : (
+                    )}
+
+                    {!claim.consultationFeeApplied && claim.activities.length === 0 && (
                       <p className="px-4 py-3 text-xs text-slate-400 italic">No coded activities recorded for this encounter.</p>
                     )}
                   </div>
@@ -376,16 +448,29 @@ export default function BillingPage() {
                   {companyClaims.map((claim) => (
                     <div key={claim.id} className="px-4 py-3 border-b border-border last:border-0">
                       <div className={cn("flex justify-between items-start gap-2", isRTL && "flex-row-reverse")}>
-                        <div className={cn("space-y-0.5", isRTL && "text-right")}>
+                        <div className={cn("space-y-0.5 flex-1", isRTL && "text-right")}>
                           <div className={cn("flex items-center gap-2 text-sm font-semibold", isRTL && "flex-row-reverse")}>
                             <User className="w-3.5 h-3.5 text-muted-foreground" />
                             {claim.patientName}
                           </div>
-                          <p className="text-xs text-muted-foreground">
-                            {claim.doctorName} · {new Date(claim.createdAt).toLocaleDateString(isRTL ? "ar-AE" : "en-AE")}
-                          </p>
+                          <div className={cn("flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap", isRTL && "flex-row-reverse")}>
+                            <Stethoscope className="w-3 h-3" />
+                            <span>{claim.doctorName}</span>
+                            {claim.doctorCategory && (
+                              <Badge variant="secondary" className="text-xs font-normal py-0 h-4">
+                                {claim.doctorCategory}
+                              </Badge>
+                            )}
+                            <span>· {new Date(claim.createdAt).toLocaleDateString(isRTL ? "ar-AE" : "en-AE")}</span>
+                          </div>
                           {claim.diagnosis && (
                             <p className="text-xs text-muted-foreground">{ar ? "تشخيص:" : "Dx:"} {claim.diagnosis}</p>
+                          )}
+                          {claim.consultationFeeApplied && (
+                            <p className="text-xs text-emerald-700 font-medium flex items-center gap-1">
+                              <CircleDollarSign className="w-3 h-3" />
+                              {ar ? "رسم الكشف:" : "Consult fee:"} AED {parseFloat(claim.consultationFeeApplied).toFixed(2)}
+                            </p>
                           )}
                           <p className="text-xs text-muted-foreground">
                             {claim.activities.length} {ar ? "خدمة" : "activities"} · AED {parseFloat(claim.activityTotal).toFixed(2)}

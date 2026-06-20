@@ -8,6 +8,7 @@ export async function runStartupSeed(): Promise<void> {
   await seedMedications();
   await seedPharmacies();
   await seedDoctorCoords();
+  await seedFeeSchedule();
   logger.info("Startup seed complete.");
 }
 
@@ -338,4 +339,25 @@ async function seedDoctorCoords(): Promise<void> {
     WHERE id BETWEEN 1 AND 5 AND latitude IS NULL
   `);
   logger.info("Doctor coordinates seeded.");
+}
+
+// ── Default Doctor Fee Schedule ────────────────────────────────────────────────
+async function seedFeeSchedule(): Promise<void> {
+  const res = await db.execute<{ count: string }>(
+    sql`SELECT count(*)::text AS count FROM doctor_categories`
+  );
+  if (parseInt(res.rows[0].count) > 0) {
+    logger.info("Fee schedule already seeded, skipping.");
+    return;
+  }
+  logger.info("Seeding default doctor fee schedule…");
+  await db.execute(sql`
+    INSERT INTO doctor_categories (name, description, consultation_fee, sort_order, is_active) VALUES
+    ('General Practitioner', 'GP — primary care consultations', '100.00', 1, true),
+    ('Specialist', 'Specialist-level consultations', '200.00', 2, true),
+    ('Senior Specialist', 'Senior specialist with advanced expertise', '350.00', 3, true),
+    ('Consultant', 'Consultant-grade — highest clinical tier', '500.00', 4, true)
+    ON CONFLICT DO NOTHING
+  `);
+  logger.info("Default fee schedule seeded.");
 }

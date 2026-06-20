@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
@@ -13,6 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
@@ -29,9 +31,13 @@ import {
   MapPin,
   Navigation,
   Loader2,
+  CircleDollarSign,
+  Plus,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 
-const MAX_BYTES = 1024 * 1024; // 1 MB
+const MAX_BYTES = 1024 * 1024;
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -42,6 +48,296 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
+interface DoctorCategory {
+  id: number;
+  name: string;
+  description: string | null;
+  consultationFee: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+// ── Fee Schedule Management Card ──────────────────────────────────────────────
+function FeeScheduleCard({ lang, isRTL }: { lang: string; isRTL: boolean }) {
+  const ar = lang === "ar";
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: categories, isLoading } = useQuery<DoctorCategory[]>({
+    queryKey: ["fee-schedule"],
+    queryFn: () => apiFetch("/fee-schedule"),
+  });
+
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editFee, setEditFee] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+
+  const [newName, setNewName] = useState("");
+  const [newFee, setNewFee] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  const startEdit = (cat: DoctorCategory) => {
+    setEditingId(cat.id);
+    setEditName(cat.name);
+    setEditFee(cat.consultationFee);
+    setEditDesc(cat.description ?? "");
+  };
+
+  const updateMutation = useMutation({
+    mutationFn: (id: number) =>
+      apiFetch(`/fee-schedule/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: editName.trim(),
+          consultationFee: parseFloat(editFee),
+          description: editDesc.trim() || null,
+        }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["fee-schedule"] });
+      setEditingId(null);
+      toast({ title: ar ? "تم الحفظ" : "Category updated" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => apiFetch(`/fee-schedule/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["fee-schedule"] });
+      toast({ title: ar ? "تم الحذف" : "Category removed" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      apiFetch("/fee-schedule", {
+        method: "POST",
+        body: JSON.stringify({
+          name: newName.trim(),
+          consultationFee: parseFloat(newFee),
+          description: newDesc.trim() || null,
+          sortOrder: (categories?.length ?? 0) + 1,
+        }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["fee-schedule"] });
+      setNewName(""); setNewFee(""); setNewDesc(""); setAdding(false);
+      toast({ title: ar ? "تمت الإضافة" : "Category added" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const tr = (en: string, arStr: string) => (ar ? arStr : en);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className={cn("flex items-center justify-between", isRTL && "flex-row-reverse")}>
+          <CardTitle className={cn("text-sm font-semibold flex items-center gap-2", isRTL && "flex-row-reverse")}>
+            <CircleDollarSign className="w-4 h-4 text-primary" />
+            {tr("Fee Schedule", "جدول الرسوم")}
+          </CardTitle>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="gap-1.5 text-xs h-7"
+            onClick={() => setAdding(true)}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            {tr("Add Category", "إضافة فئة")}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">
+          {tr(
+            "Define consultation fee tiers by doctor category. Fees are auto-applied when creating an encounter.",
+            "حدِّد رسوم الكشف لكل فئة من الأطباء. تُطبَّق الرسوم تلقائياً عند فتح سجل المريض."
+          )}
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-2 pb-4">
+        {isLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
+          </div>
+        ) : !categories?.length ? (
+          <p className="text-xs text-muted-foreground text-center py-4">
+            {tr("No categories yet. Add one above.", "لا توجد فئات. أضف واحدة بالضغط أعلاه.")}
+          </p>
+        ) : (
+          <div className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+            {categories.map((cat) => (
+              <div key={cat.id} className={cn("px-4 py-3 bg-background", editingId === cat.id && "bg-muted/30")}>
+                {editingId === cat.id ? (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">{tr("Category Name", "اسم الفئة")}</Label>
+                        <Input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">{tr("Fee (AED)", "الرسم (AED)")}</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={editFee}
+                          onChange={(e) => setEditFee(e.target.value)}
+                          className="h-8 text-sm font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">{tr("Description (optional)", "الوصف (اختياري)")}</Label>
+                      <Input
+                        value={editDesc}
+                        onChange={(e) => setEditDesc(e.target.value)}
+                        className="h-8 text-sm"
+                        placeholder={tr("Short description...", "وصف قصير...")}
+                      />
+                    </div>
+                    <div className={cn("flex gap-2 justify-end", isRTL && "flex-row-reverse")}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs"
+                        onClick={() => setEditingId(null)}
+                      >
+                        {tr("Cancel", "إلغاء")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs"
+                        disabled={!editName.trim() || !editFee || updateMutation.isPending}
+                        onClick={() => updateMutation.mutate(cat.id)}
+                      >
+                        {updateMutation.isPending
+                          ? <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                          : <Save className="w-3 h-3 mr-1" />}
+                        {tr("Save", "حفظ")}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={cn("flex items-center justify-between gap-3", isRTL && "flex-row-reverse")}>
+                    <div className={cn("flex-1 min-w-0", isRTL && "text-right")}>
+                      <div className={cn("flex items-center gap-2 flex-wrap", isRTL && "flex-row-reverse")}>
+                        <span className="text-sm font-semibold">{cat.name}</span>
+                        {cat.description && (
+                          <span className="text-xs text-muted-foreground truncate">{cat.description}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className={cn("flex items-center gap-3 shrink-0", isRTL && "flex-row-reverse")}>
+                      <Badge variant="outline" className="text-emerald-700 border-emerald-300 font-mono font-semibold text-xs">
+                        AED {parseFloat(cat.consultationFee).toFixed(2)}
+                      </Badge>
+                      <div className={cn("flex items-center gap-1", isRTL && "flex-row-reverse")}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          onClick={() => startEdit(cat)}
+                        >
+                          <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          disabled={deleteMutation.isPending}
+                          onClick={() => {
+                            if (confirm(tr("Remove this category?", "حذف هذه الفئة؟"))) {
+                              deleteMutation.mutate(cat.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add new category form */}
+        {adding && (
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2 mt-2">
+            <p className="text-xs font-semibold text-primary">{tr("New Category", "فئة جديدة")}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">{tr("Category Name *", "اسم الفئة *")}</Label>
+                <Input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder={tr("e.g. Consultant", "مثال: استشاري")}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">{tr("Fee (AED) *", "الرسم (AED) *")}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newFee}
+                  onChange={(e) => setNewFee(e.target.value)}
+                  placeholder="0.00"
+                  className="h-8 text-sm font-mono"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{tr("Description (optional)", "الوصف (اختياري)")}</Label>
+              <Input
+                value={newDesc}
+                onChange={(e) => setNewDesc(e.target.value)}
+                className="h-8 text-sm"
+                placeholder={tr("Short note about this tier...", "ملاحظة قصيرة...")}
+              />
+            </div>
+            <div className={cn("flex gap-2 justify-end", isRTL && "flex-row-reverse")}>
+              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setAdding(false)}>
+                {tr("Cancel", "إلغاء")}
+              </Button>
+              <Button
+                size="sm"
+                className="h-7 text-xs"
+                disabled={!newName.trim() || !newFee || createMutation.isPending}
+                onClick={() => createMutation.mutate()}
+              >
+                {createMutation.isPending
+                  ? <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                  : <Plus className="w-3 h-3 mr-1" />}
+                {tr("Add", "إضافة")}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <p className="text-xs text-muted-foreground pt-1">
+          {tr(
+            "Assign categories to individual doctors from the staff management section.",
+            "يمكن تعيين الفئة لكل طبيب من قسم إدارة الكوادر الطبية."
+          )}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Main Settings Page ────────────────────────────────────────────────────────
 export default function SettingsPage() {
   const { lang, isRTL } = useI18n();
   const { user } = useAuth();
@@ -49,29 +345,23 @@ export default function SettingsPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // ── Identity fields ─────────────────────────────────────────────────────────
   const [name, setName] = useState("");
 
-  // ── Logo fields ──────────────────────────────────────────────────────────────
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoChanged, setLogoChanged] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [fileError, setFileError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Address fields ───────────────────────────────────────────────────────────
   const [address, setAddress] = useState("");
   const [city, setCity]       = useState("");
   const [country, setCountry] = useState("");
-
-  // ── Coordinate fields ────────────────────────────────────────────────────────
   const [latitude,  setLatitude]  = useState("");
   const [longitude, setLongitude] = useState("");
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError]   = useState("");
   const [geoSuccess, setGeoSuccess] = useState(false);
 
-  // Sync coordinates from DB when settings first load (they need to be visible in the fields)
   useEffect(() => {
     if (!saved.isLoading) {
       if (saved.latitude  != null && latitude  === "") setLatitude(String(saved.latitude));
@@ -89,7 +379,6 @@ export default function SettingsPage() {
   const displayName = name.trim() !== "" ? name : saved.clinicName;
   const displayLogo = logoChanged ? logoPreview : saved.logoBase64;
 
-  // ── Mutation ─────────────────────────────────────────────────────────────────
   const mutation = useMutation({
     mutationFn: (payload: Partial<ClinicSettings>) =>
       apiFetch<ClinicSettings>("/settings", {
@@ -119,7 +408,6 @@ export default function SettingsPage() {
     },
   });
 
-  // ── Logo helpers ─────────────────────────────────────────────────────────────
   const processFile = useCallback(async (file: File) => {
     setFileError("");
     if (!["image/png", "image/jpeg"].includes(file.type)) {
@@ -149,7 +437,6 @@ export default function SettingsPage() {
 
   const handleRemoveLogo = () => { setLogoPreview(null); setLogoChanged(true); setFileError(""); };
 
-  // ── Geocoding (Nominatim / OpenStreetMap — free, no key required) ────────────
   const geocodeAddress = async () => {
     const parts = [address || saved.address, city || saved.city, country || saved.country]
       .filter(Boolean) as string[];
@@ -183,7 +470,6 @@ export default function SettingsPage() {
     }
   };
 
-  // ── Save handler ─────────────────────────────────────────────────────────────
   const handleSave = () => {
     const latNum  = latitude.trim()  !== "" ? parseFloat(latitude)  : null;
     const lonNum  = longitude.trim() !== "" ? parseFloat(longitude) : null;
@@ -210,7 +496,6 @@ export default function SettingsPage() {
     mutation.mutate(payload);
   };
 
-  // ── Access guard ──────────────────────────────────────────────────────────────
   if (!isAdmin) {
     return (
       <div className="text-center py-16">
@@ -233,7 +518,7 @@ export default function SettingsPage() {
     >
       <Toaster />
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      {/* Header */}
       <div className={cn(isRTL && "text-right")}>
         <h1 className="text-xl font-bold flex items-center gap-2">
           <Settings className="w-5 h-5 text-primary" />
@@ -241,13 +526,13 @@ export default function SettingsPage() {
         </h1>
         <p className="text-xs text-muted-foreground mt-0.5">
           {tr(
-            "Configure your medical center's identity, location, and branding",
-            "ضبط هوية المركز الطبي وموقعه وعلامته التجارية عبر المنصة"
+            "Configure your medical center's identity, location, and fee schedule",
+            "ضبط هوية المركز الطبي وموقعه وجدول الرسوم"
           )}
         </p>
       </div>
 
-      {/* ── Live preview ────────────────────────────────────────────────────── */}
+      {/* Live preview */}
       <Card className="border border-primary/20 bg-primary/5">
         <CardContent className="p-4">
           <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">
@@ -274,7 +559,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* ── Medical Center Name ─────────────────────────────────────────────── */}
+      {/* Medical Center Name */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -302,7 +587,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* ── Location & Address ──────────────────────────────────────────────── */}
+      {/* Location & Address */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -318,7 +603,6 @@ export default function SettingsPage() {
             )}
           </p>
 
-          {/* Street / City / Country row */}
           <div className="grid gap-3">
             <div className="space-y-1">
               <Label htmlFor="address" className="text-xs font-medium">
@@ -361,7 +645,6 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Coordinates */}
           <div className="pt-1 border-t border-border space-y-3">
             <div className={cn("flex items-center justify-between gap-2", isRTL && "flex-row-reverse")}>
               <div>
@@ -432,7 +715,6 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Geocoding feedback */}
             {geoSuccess && (
               <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-400">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -446,7 +728,6 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* Google Maps preview link */}
             {latitude && longitude && !isNaN(parseFloat(latitude)) && !isNaN(parseFloat(longitude)) && (
               <a
                 href={`https://www.google.com/maps?q=${latitude},${longitude}`}
@@ -462,7 +743,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* ── Medical Center Logo ─────────────────────────────────────────────── */}
+      {/* Medical Center Logo */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -479,7 +760,6 @@ export default function SettingsPage() {
           </p>
 
           <div className="flex gap-4 items-start flex-wrap">
-            {/* Drop zone */}
             <div
               className={cn(
                 "relative border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors text-center w-52 h-44",
@@ -508,7 +788,6 @@ export default function SettingsPage() {
               />
             </div>
 
-            {/* Current / preview */}
             <div className="flex flex-col items-center gap-2">
               <p className="text-xs text-muted-foreground font-medium">
                 {logoChanged ? tr("New Logo Preview", "معاينة الشعار الجديد") : tr("Current Logo", "الشعار الحالي")}
@@ -518,58 +797,46 @@ export default function SettingsPage() {
                   <>
                     <img src={displayLogo} alt="logo preview" className="w-full h-full object-contain p-1" />
                     <button
+                      type="button"
                       onClick={(e) => { e.stopPropagation(); handleRemoveLogo(); }}
-                      className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"
+                      className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
                     >
-                      <X className="w-5 h-5 text-white" />
+                      <X className="w-3 h-3" />
                     </button>
                   </>
                 ) : (
-                  <Stethoscope className="w-10 h-10 text-primary/40" />
+                  <Stethoscope className="w-8 h-8 text-primary/40" />
                 )}
               </div>
-              {displayLogo ? (
-                <button
-                  onClick={handleRemoveLogo}
-                  className="text-xs text-destructive hover:underline flex items-center gap-1"
-                >
-                  <X className="w-3 h-3" />
-                  {tr("Remove logo", "حذف الشعار")}
-                </button>
-              ) : (
-                <p className="text-xs text-muted-foreground">{tr("Default icon", "أيقونة افتراضية")}</p>
-              )}
             </div>
           </div>
 
           {fileError && (
-            <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
+            <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/10 p-2 rounded-lg">
+              <AlertCircle className="w-3 h-3" />
               {fileError}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* ── Save ───────────────────────────────────────────────────────────── */}
-      <div className={cn("flex items-center gap-3 pb-8", isRTL && "flex-row-reverse")}>
-        <Button onClick={handleSave} disabled={mutation.isPending} className="gap-2">
-          <Save className="w-4 h-4" />
-          {mutation.isPending ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Settings", "حفظ الإعدادات")}
-        </Button>
+      {/* Fee Schedule */}
+      <FeeScheduleCard lang={lang} isRTL={isRTL} />
 
-        {mutation.isSuccess && (
-          <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
-            <CheckCircle2 className="w-4 h-4" />
-            {tr("Saved successfully", "تم الحفظ بنجاح")}
-          </span>
-        )}
-        {mutation.isError && (
-          <span className="flex items-center gap-1.5 text-sm text-destructive font-medium">
-            <AlertCircle className="w-4 h-4" />
-            {mutation.error?.message ?? tr("Save failed", "فشل الحفظ")}
-          </span>
-        )}
+      {/* Action bar */}
+      <div className="sticky bottom-0 bg-background/80 backdrop-blur-sm py-4 border-t border-border flex justify-end">
+        <Button
+          onClick={handleSave}
+          disabled={mutation.isPending}
+          className="gap-2 min-w-[140px]"
+        >
+          {mutation.isPending ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Save className="w-4 h-4" />
+          )}
+          {mutation.isPending ? tr("Saving…", "جارٍ الحفظ…") : tr("Save Changes", "حفظ التغييرات")}
+        </Button>
       </div>
     </div>
   );

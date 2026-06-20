@@ -22,6 +22,13 @@ export const consultationsTable = pgTable("consultations", {
   paidAmount: numeric("paid_amount", { precision: 10, scale: 2 }),
   insuranceCompany: text("insurance_company"),
   insuranceAmount: numeric("insurance_amount", { precision: 10, scale: 2 }),
+  // ── Consultation fee (snapshotted at creation from doctor's category) ──────
+  consultationFeeApplied: numeric("consultation_fee_applied", { precision: 10, scale: 2 }),
+  doctorCategory: text("doctor_category"),                                  // category name snapshot
+  // ── Fee override audit trail ───────────────────────────────────────────────
+  feeOverrideReason: text("fee_override_reason"),
+  feeOverriddenBy: integer("fee_overridden_by"),                            // userId
+  feeOverriddenAt: timestamp("fee_overridden_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

@@ -18,6 +18,7 @@ export const doctorsTable = pgTable("doctors", {
   latitude: numeric("latitude", { precision: 10, scale: 6 }),
   longitude: numeric("longitude", { precision: 10, scale: 6 }),
   clinicAddress: text("clinic_address"),
+  categoryId: integer("category_id"),                                       // FK → doctor_categories.id
   medicalCenterId: integer("medical_center_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

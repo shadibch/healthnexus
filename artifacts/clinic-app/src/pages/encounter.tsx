@@ -47,6 +47,9 @@ import {
   Pill,
   Trash2,
   Printer,
+  CircleDollarSign,
+  PenLine,
+  ShieldAlert,
 } from "lucide-react";
 import MedicationAutocomplete, { type MedicationOption } from "@/components/MedicationAutocomplete";
 import PaymentPanel from "@/components/PaymentPanel";
@@ -141,6 +144,16 @@ interface Encounter {
   status: string;
   createdAt: string;
   orders: MedicalOrder[];
+  // Fee schedule fields
+  consultationFeeApplied: string | null;
+  doctorCategory: string | null;
+  feeOverrideReason: string | null;
+  feeOverriddenAt: string | null;
+  paymentStatus: string;
+  paymentMethod: string | null;
+  paidAmount: string | null;
+  insuranceCompany: string | null;
+  insuranceAmount: string | null;
 }
 
 interface Appointment {
@@ -176,6 +189,94 @@ interface PastEncounter {
   status: string;
   createdAt: string;
   orders: MedicalOrder[];
+}
+
+// ─── Fee Override Dialog ──────────────────────────────────────────────────────
+function FeeOverrideDialog({
+  consultationId,
+  currentFee,
+  open,
+  onClose,
+}: {
+  consultationId: number;
+  currentFee: string | null;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { lang } = useI18n();
+  const [newFee, setNewFee] = useState(currentFee ?? "");
+  const [reason, setReason] = useState("");
+
+  useEffect(() => {
+    if (open) { setNewFee(currentFee ?? ""); setReason(""); }
+  }, [open, currentFee]);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      apiFetch(`/consultations/${consultationId}/fee-override`, {
+        method: "PATCH",
+        body: JSON.stringify({ consultationFeeApplied: parseFloat(newFee), reason }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["encounter", consultationId] });
+      toast({ title: lang === "ar" ? "تم تعديل الرسم" : "Fee overridden and logged" });
+      onClose();
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-amber-600" />
+            {lang === "ar" ? "تعديل رسم الكشف (يتطلب مبرراً)" : "Override Consultation Fee (Requires Justification)"}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 mt-2">
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+            {lang === "ar"
+              ? "تحذير: يتم تسجيل كل تعديل للرسوم مع اسم المستخدم والوقت لأغراض التدقيق."
+              : "Warning: All fee overrides are logged with your name and timestamp for audit purposes."}
+          </div>
+          <div>
+            <Label className="text-xs">{lang === "ar" ? "الرسم الجديد (AED)" : "New Fee (AED)"}</Label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              className="mt-1 font-mono"
+              value={newFee}
+              onChange={(e) => setNewFee(e.target.value)}
+              placeholder="0.00"
+            />
+          </div>
+          <div>
+            <Label className="text-xs">{lang === "ar" ? "مبرر التعديل *" : "Reason for Override *"}</Label>
+            <Textarea
+              className="mt-1"
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder={lang === "ar" ? "اذكر المبرر..." : "e.g. VIP patient, insurance rate, director approval..."}
+            />
+            <p className="text-xs text-muted-foreground mt-1">{lang === "ar" ? "الحد الأدنى 5 أحرف" : "Minimum 5 characters required"}</p>
+          </div>
+          <Button
+            className="w-full bg-amber-600 hover:bg-amber-700"
+            onClick={() => mutation.mutate()}
+            disabled={!newFee || reason.trim().length < 5 || mutation.isPending}
+          >
+            {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            {lang === "ar" ? "تأكيد التعديل" : "Confirm Override"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 // ─── Add Order Dialog ────────────────────────────────────────────────────────
@@ -332,6 +433,7 @@ export default function EncounterPage() {
   const [pendingOrderType, setPendingOrderType] = useState<string | null>(null);
   const [pendingOrderName, setPendingOrderName] = useState<string | null>(null);
   const [resultOrder, setResultOrder] = useState<MedicalOrder | null>(null);
+  const [feeOverrideOpen, setFeeOverrideOpen] = useState(false);
 
   // Form state
   const [vitals, setVitals] = useState("");
@@ -1227,16 +1329,67 @@ export default function EncounterPage() {
               {/* HAAD / CPT Activity Codes & Billing */}
               <ActivitiesPanel consultationId={activeEncounterId} isCompleted={isCompleted} />
 
+              {/* Consultation Fee Card */}
+              {encounter && (
+                <Card className="border-emerald-200 bg-emerald-50/40">
+                  <CardHeader className="py-2.5 px-4">
+                    <CardTitle className={cn("text-sm font-semibold flex items-center gap-2", isRTL && "flex-row-reverse")}>
+                      <CircleDollarSign className="w-4 h-4 text-emerald-600" />
+                      {lang === "ar" ? "رسم الكشف" : "Consultation Fee"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3">
+                    <div className={cn("flex items-center justify-between gap-3", isRTL && "flex-row-reverse")}>
+                      <div className={cn("space-y-0.5", isRTL && "text-right")}>
+                        {encounter.doctorCategory && (
+                          <div className={cn("flex items-center gap-1.5 text-xs text-muted-foreground", isRTL && "flex-row-reverse")}>
+                            <Stethoscope className="w-3 h-3" />
+                            {lang === "ar" ? "الفئة:" : "Category:"}{" "}
+                            <span className="font-medium text-foreground">{encounter.doctorCategory}</span>
+                          </div>
+                        )}
+                        {encounter.consultationFeeApplied ? (
+                          <p className="text-xl font-bold text-emerald-700 font-mono">
+                            AED {parseFloat(encounter.consultationFeeApplied).toFixed(2)}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-muted-foreground italic">
+                            {lang === "ar" ? "لم يُحدَّد رسم" : "No fee set (doctor has no category)"}
+                          </p>
+                        )}
+                        {encounter.feeOverrideReason && (
+                          <div className={cn("flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-1", isRTL && "flex-row-reverse")}>
+                            <ShieldAlert className="w-3 h-3 shrink-0" />
+                            <span>{lang === "ar" ? "رسم معدَّل:" : "Override:"} {encounter.feeOverrideReason}</span>
+                          </div>
+                        )}
+                      </div>
+                      {(hasRole("doctor") || hasRole("receptionist")) && !isCompleted && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 text-xs border-amber-300 text-amber-700 hover:bg-amber-50 shrink-0"
+                          onClick={() => setFeeOverrideOpen(true)}
+                        >
+                          <PenLine className="w-3.5 h-3.5" />
+                          {lang === "ar" ? "تعديل الرسم" : "Override Fee"}
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Payment & Billing Panel */}
               {encounter && (
                 <PaymentPanel
                   consultationId={encounter.id}
                   current={{
-                    paymentStatus: (encounter as any).paymentStatus ?? "unpaid",
-                    paymentMethod: (encounter as any).paymentMethod ?? null,
-                    paidAmount: (encounter as any).paidAmount ?? null,
-                    insuranceCompany: (encounter as any).insuranceCompany ?? null,
-                    insuranceAmount: (encounter as any).insuranceAmount ?? null,
+                    paymentStatus: (encounter.paymentStatus ?? "unpaid") as "unpaid" | "paid" | "exempted" | "partial",
+                    paymentMethod: (encounter.paymentMethod ?? null) as "cash" | "card" | null,
+                    paidAmount: encounter.paidAmount ?? null,
+                    insuranceCompany: encounter.insuranceCompany ?? null,
+                    insuranceAmount: encounter.insuranceAmount ?? null,
                   }}
                   activityTotal={0}
                   lang={lang}
@@ -1360,6 +1513,14 @@ export default function EncounterPage() {
       {/* Dialogs */}
       {activeEncounterId && (
         <AddOrderDialog consultationId={activeEncounterId} open={addOrderOpen} onClose={() => setAddOrderOpen(false)} />
+      )}
+      {encounter && (
+        <FeeOverrideDialog
+          consultationId={encounter.id}
+          currentFee={encounter.consultationFeeApplied}
+          open={feeOverrideOpen}
+          onClose={() => setFeeOverrideOpen(false)}
+        />
       )}
       <ResultDialog order={resultOrder} onClose={() => setResultOrder(null)} />
     </div>

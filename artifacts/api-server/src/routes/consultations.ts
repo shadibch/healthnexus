@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, lt, and } from "drizzle-orm";
-import { db, consultationsTable, patientsTable, doctorsTable, medicalOrdersTable } from "@workspace/db";
+import { db, consultationsTable, patientsTable, doctorsTable, medicalOrdersTable, doctorCategoriesTable } from "@workspace/db";
 import {
   ListConsultationsQueryParams,
   CreateConsultationBody,
@@ -21,6 +21,38 @@ async function getMaps() {
   const doctors = await db.select().from(doctorsTable);
   const doctorMap = new Map(doctors.map((d) => [d.id, `Dr. ${d.firstName} ${d.lastName}`]));
   return { patientMap, doctorMap };
+}
+
+/**
+ * Resolves the consultation fee from the doctor's assigned category.
+ * Falls back to the legacy doctors.consultationFee if no category is set.
+ */
+async function resolveDoctorFee(
+  doctorId: number
+): Promise<{ fee: string | null; categoryName: string | null }> {
+  const [doctor] = await db
+    .select()
+    .from(doctorsTable)
+    .where(eq(doctorsTable.id, doctorId));
+
+  if (!doctor) return { fee: null, categoryName: null };
+
+  if (doctor.categoryId != null) {
+    const [category] = await db
+      .select()
+      .from(doctorCategoriesTable)
+      .where(eq(doctorCategoriesTable.id, doctor.categoryId));
+    if (category) {
+      return { fee: category.consultationFee, categoryName: category.name };
+    }
+  }
+
+  // Backward compat: use legacy consultationFee on the doctor record
+  if (doctor.consultationFee != null) {
+    return { fee: doctor.consultationFee, categoryName: null };
+  }
+
+  return { fee: null, categoryName: null };
 }
 
 router.get("/consultations", requireAuth, async (req, res): Promise<void> => {
@@ -62,7 +94,7 @@ router.get("/consultations", requireAuth, async (req, res): Promise<void> => {
   );
 });
 
-// Create consultation/encounter with 7-day follow-up detection
+// Create consultation/encounter with 7-day follow-up detection + fee auto-apply
 router.post("/consultations", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
   if (!session.roles.includes("doctor")) {
@@ -77,7 +109,6 @@ router.post("/consultations", requireAuth, async (req, res): Promise<void> => {
   }
 
   const data = parsed.data as any;
-  // Always derive doctorId from session — never trust the body for security
   const doctorId = session.doctorDbId!;
   const patientId = data.patientId;
   const appointmentId = data.appointmentId;
@@ -90,7 +121,6 @@ router.post("/consultations", requireAuth, async (req, res): Promise<void> => {
       .where(eq(consultationsTable.appointmentId, appointmentId))
       .limit(1);
     if (existing.length > 0) {
-      // Return existing encounter instead of creating a duplicate
       const { patientMap, doctorMap } = await getMaps();
       const enc = existing[0];
       const orders = await db
@@ -109,7 +139,7 @@ router.post("/consultations", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
-  // 7-day follow-up detection: find the patient's most recent consultation
+  // 7-day follow-up detection
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const recentConsultations = await db
     .select()
@@ -131,9 +161,19 @@ router.post("/consultations", requireAuth, async (req, res): Promise<void> => {
     encounterType = "follow_up";
   }
 
+  // Auto-apply consultation fee from doctor's category (or legacy fee)
+  const { fee, categoryName } = await resolveDoctorFee(doctorId);
+
   const [consultation] = await db
     .insert(consultationsTable)
-    .values({ ...data, doctorId, parentConsultationId, encounterType })
+    .values({
+      ...data,
+      doctorId,
+      parentConsultationId,
+      encounterType,
+      consultationFeeApplied: fee,
+      doctorCategory: categoryName,
+    })
     .returning();
 
   const { patientMap, doctorMap } = await getMaps();
@@ -161,7 +201,6 @@ router.get("/consultations/:id", requireAuth, async (req, res): Promise<void> =>
     return;
   }
 
-  // Patients can only see their own consultations
   if (session.roles.includes("patient") && session.patientDbId !== consultation.patientId) {
     res.status(403).json({ error: "Not your consultation" });
     return;
@@ -169,7 +208,6 @@ router.get("/consultations/:id", requireAuth, async (req, res): Promise<void> =>
 
   const { patientMap, doctorMap } = await getMaps();
 
-  // Fetch medical orders for this consultation
   const orders = await db
     .select()
     .from(medicalOrdersTable)
@@ -220,7 +258,6 @@ router.patch("/consultations/:id", requireAuth, async (req, res): Promise<void> 
   });
 });
 
-// Medical orders for a consultation
 router.get("/consultations/:id/orders", requireAuth, async (req, res): Promise<void> => {
   const idNum = parseInt(String(req.params.id));
   if (isNaN(idNum)) { res.status(400).json({ error: "Invalid id" }); return; }

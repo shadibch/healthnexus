@@ -1,12 +1,11 @@
 import { Router, type IRouter } from "express";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
-import { db, consultationsTable, patientsTable, doctorsTable, encounterActivitiesTable } from "@workspace/db";
+import { eq, desc } from "drizzle-orm";
+import { db, consultationsTable, patientsTable, doctorsTable, encounterActivitiesTable, doctorCategoriesTable } from "@workspace/db";
 import { requireAuth, getSessionUser } from "../lib/session";
 
 const router: IRouter = Router();
 
 // GET /billing/claims?from=YYYY-MM-DD&to=YYYY-MM-DD&status=partial
-// Returns encounters with partial or unpaid payment for insurance billing
 router.get("/billing/claims", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
   if (!session.roles.includes("receptionist") && !session.roles.includes("doctor")) {
@@ -20,8 +19,19 @@ router.get("/billing/claims", requireAuth, async (req, res): Promise<void> => {
 
   const patients = await db.select().from(patientsTable);
   const patientMap = new Map(patients.map((p) => [p.id, p]));
+
   const doctors = await db.select().from(doctorsTable);
-  const doctorMap = new Map(doctors.map((d) => [d.id, `Dr. ${d.firstName} ${d.lastName}`]));
+  const categories = await db.select().from(doctorCategoriesTable);
+  const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
+  const doctorMap = new Map(
+    doctors.map((d) => [
+      d.id,
+      {
+        name: `Dr. ${d.firstName} ${d.lastName}`,
+        category: d.categoryId != null ? (categoryMap.get(d.categoryId) ?? null) : null,
+      },
+    ])
+  );
 
   let consultations = await db
     .select()
@@ -51,13 +61,19 @@ router.get("/billing/claims", requireAuth, async (req, res): Promise<void> => {
 
       const activityTotal = activities.reduce((sum, a) => sum + parseFloat(a.total ?? "0"), 0);
       const patient = patientMap.get(c.patientId);
+      const doctor = doctorMap.get(c.doctorId);
+
+      // Use snapshotted category on consultation; fall back to live doctor category for older records
+      const effectiveDoctorCategory = c.doctorCategory ?? doctor?.category ?? null;
 
       return {
         ...c,
         patientName: patient ? `${patient.firstName} ${patient.lastName}` : null,
         patientNationalId: patient?.nationalId ?? null,
         patientPhone: patient?.phone ?? null,
-        doctorName: doctorMap.get(c.doctorId) ?? null,
+        doctorName: doctor?.name ?? null,
+        doctorCategory: effectiveDoctorCategory,
+        consultationFeeApplied: c.consultationFeeApplied ?? null,
         activities,
         activityTotal: activityTotal.toFixed(2),
       };
