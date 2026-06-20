@@ -909,6 +909,35 @@ export default function EncounterPage() {
                               </div>
                             ))}
                           </div>
+                          {/* Prominent re-print button — full width, easy to find when reopening encounter */}
+                          {rx.items.length > 0 && (
+                            <div className="px-3 pb-3">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className={cn(
+                                  "w-full gap-2 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400",
+                                  isRTL && "flex-row-reverse"
+                                )}
+                                onClick={() =>
+                                  printPrescription(
+                                    {
+                                      id: rx.id,
+                                      patientName: appointment?.patientName ?? null,
+                                      doctorName: appointment?.doctorName ?? null,
+                                      issuedAt: rx.issuedAt,
+                                      notes: null,
+                                      items: rx.items,
+                                    },
+                                    { clinicName: clinic.clinicName, logoBase64: clinic.logoBase64 }
+                                  )
+                                }
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                                {lang === "ar" ? "طباعة الوصفة الطبية" : "Print Prescription"}
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

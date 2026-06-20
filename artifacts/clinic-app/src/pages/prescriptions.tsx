@@ -261,6 +261,18 @@ export default function PrescriptionsPage() {
                             {t("dispensed")} {formatDistanceToNow(new Date(rx.dispensedAt), { addSuffix: true })}
                           </p>
                         )}
+                        {/* Print Prescription — quick access inside expanded view */}
+                        {rx.items.length > 0 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className={cn("w-full mt-1 gap-2 text-xs", isRTL && "flex-row-reverse")}
+                            onClick={() => handlePrint(rx)}
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            {isRTL ? "طباعة الوصفة الطبية" : "Print Prescription"}
+                          </Button>
+                        )}
                       </div>
                     )}
                   </CardContent>
