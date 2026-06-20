@@ -202,6 +202,34 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     if (feeInput.trim()) feeMutation.mutate(feeInput.trim());
   }
 
+  // Inline name editing state
+  const [editingName, setEditingName] = useState(false);
+  const [firstNameInput, setFirstNameInput] = useState("");
+  const [lastNameInput, setLastNameInput] = useState("");
+
+  const nameMutation = useMutation({
+    mutationFn: ({ firstName, lastName }: { firstName: string; lastName: string }) =>
+      apiFetch(`/doctors/${user!.doctorDbId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ firstName, lastName }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["my-doctor-profile", user?.doctorDbId] });
+      setEditingName(false);
+    },
+  });
+
+  function startEditName() {
+    setFirstNameInput(doctorProfile?.firstName ?? "");
+    setLastNameInput(doctorProfile?.lastName ?? "");
+    setEditingName(true);
+  }
+  function saveName() {
+    const fn = firstNameInput.trim();
+    const ln = lastNameInput.trim();
+    if (fn) nameMutation.mutate({ firstName: fn, lastName: ln || "-" });
+  }
+
   const ROLE_LABELS: Record<string, string> = {
     doctor:       t("doctorView"),
     patient:      t("patientView"),
@@ -277,9 +305,48 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* ── Doctor profile card ── */}
         {doctorProfile && (
           <div className="mx-3 mt-2 rounded-lg border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/30 dark:border-emerald-800 p-3 space-y-1.5">
-            <p className={cn("text-xs font-bold text-emerald-800 dark:text-emerald-300 truncate", isRTL && "text-right")}>
-              Dr. {doctorProfile.firstName} {doctorProfile.lastName}
-            </p>
+            {/* Name row */}
+            {editingName ? (
+              <div className="space-y-1">
+                <div className="flex gap-1">
+                  <Input
+                    value={firstNameInput}
+                    onChange={e => setFirstNameInput(e.target.value)}
+                    placeholder="First"
+                    className="h-6 text-xs px-1.5 flex-1 min-w-0"
+                    autoFocus
+                    onKeyDown={e => { if (e.key === "Enter") saveName(); if (e.key === "Escape") setEditingName(false); }}
+                  />
+                  <Input
+                    value={lastNameInput}
+                    onChange={e => setLastNameInput(e.target.value)}
+                    placeholder="Last"
+                    className="h-6 text-xs px-1.5 flex-1 min-w-0"
+                    onKeyDown={e => { if (e.key === "Enter") saveName(); if (e.key === "Escape") setEditingName(false); }}
+                  />
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={saveName} disabled={nameMutation.isPending} className="text-[10px] flex items-center gap-0.5 text-emerald-600 hover:text-emerald-700 font-medium">
+                    <Check className="w-3 h-3" /> Save
+                  </button>
+                  <button onClick={() => setEditingName(false)} className="text-[10px] flex items-center gap-0.5 text-muted-foreground hover:text-foreground ml-2">
+                    <X className="w-3 h-3" /> Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className={cn("flex items-center gap-1 group", isRTL && "flex-row-reverse")}>
+                <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300 truncate flex-1">
+                  Dr. {doctorProfile.firstName} {doctorProfile.lastName}
+                </p>
+                <button
+                  onClick={startEditName}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground shrink-0"
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
+              </div>
+            )}
             <p className={cn("text-[11px] text-muted-foreground truncate", isRTL && "text-right")}>
               {doctorProfile.specialization}
             </p>
