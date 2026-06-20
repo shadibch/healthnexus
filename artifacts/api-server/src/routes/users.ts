@@ -19,6 +19,9 @@ const CompleteAdminOnboardingBody = z.object({
   address: z.string().optional(),
   latitude: z.string().optional(),
   longitude: z.string().optional(),
+  adminName: z.string().optional(),
+  specialization: z.string().optional(),
+  consultationFee: z.string().optional(),
 });
 
 const CompletePatientOnboardingBody = z.object({
@@ -88,7 +91,7 @@ router.post("/users/onboarding/admin", requireAuth, async (req, res): Promise<vo
     return;
   }
 
-  const { centerName, address, latitude, longitude } = parsed.data;
+  const { centerName, address, latitude, longitude, adminName, specialization, consultationFee } = parsed.data;
   const [center] = await db.insert(medicalCentersTable).values({
     name: centerName,
     address: address ?? null,
@@ -97,15 +100,16 @@ router.post("/users/onboarding/admin", requireAuth, async (req, res): Promise<vo
     adminUserId: session.userId,
   }).returning();
 
-  await db.update(usersTable).set({
-    medicalCenterId: center.id,
-    onboardingComplete: true,
-  }).where(eq(usersTable.id, session.userId));
+  const userUpdates: Record<string, unknown> = { medicalCenterId: center.id, onboardingComplete: true };
+  if (adminName?.trim()) userUpdates.name = adminName.trim();
+
+  await db.update(usersTable).set(userUpdates as any).where(eq(usersTable.id, session.userId));
 
   // If the admin is also a doctor, create a doctor record
   let doctor = null;
   if (session.roles.includes("doctor")) {
-    const nameParts = (session.name ?? session.email).split(" ");
+    const displayName = adminName?.trim() || session.name || session.email;
+    const nameParts = displayName.split(" ");
     const firstName = nameParts[0] ?? session.email;
     const lastName = nameParts.slice(1).join(" ") || "-";
     [doctor] = await db.insert(doctorsTable).values({
@@ -113,7 +117,8 @@ router.post("/users/onboarding/admin", requireAuth, async (req, res): Promise<vo
       clerkId: session.clerkId ?? null,
       firstName,
       lastName,
-      specialization: "General Practitioner",
+      specialization: specialization?.trim() || "General Practitioner",
+      consultationFee: consultationFee?.trim() || null,
       email: session.email,
       medicalCenterId: center.id,
     }).returning();

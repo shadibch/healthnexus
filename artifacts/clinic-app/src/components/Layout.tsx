@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useRole } from "@/lib/role";
 import { useAuth } from "@/lib/auth";
 import { useClerk } from "@clerk/react";
 import { useI18n } from "@/lib/i18n";
 import { useNavBadges } from "@/hooks/use-badges";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -23,9 +26,13 @@ import {
   Settings,
   Building2,
   Bell,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 import { useClinicSettings } from "@/lib/clinic-settings";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { AppRole } from "@/lib/auth";
 import type { LucideIcon } from "lucide-react";
 
@@ -145,6 +152,14 @@ function buildNav(
   return items;
 }
 
+type DoctorProfile = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  specialization: string;
+  consultationFee: string | null;
+};
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { role, roles } = useRole();
   const { user } = useAuth();
@@ -153,6 +168,39 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const badges = useNavBadges();
   const { clinicName, logoBase64 } = useClinicSettings();
+  const qc = useQueryClient();
+
+  // Fetch doctor profile for users who have the doctor role
+  const { data: doctorProfile } = useQuery<DoctorProfile>({
+    queryKey: ["my-doctor-profile", user?.doctorDbId],
+    queryFn: () => apiFetch(`/doctors/${user!.doctorDbId}`),
+    enabled: !!user?.doctorDbId,
+    staleTime: 60_000,
+  });
+
+  // Inline fee editing state
+  const [editingFee, setEditingFee] = useState(false);
+  const [feeInput, setFeeInput] = useState("");
+
+  const feeMutation = useMutation({
+    mutationFn: (fee: string) =>
+      apiFetch(`/doctors/${user!.doctorDbId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ consultationFee: fee }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["my-doctor-profile", user?.doctorDbId] });
+      setEditingFee(false);
+    },
+  });
+
+  function startEditFee() {
+    setFeeInput(doctorProfile?.consultationFee ?? "");
+    setEditingFee(true);
+  }
+  function saveFee() {
+    if (feeInput.trim()) feeMutation.mutate(feeInput.trim());
+  }
 
   const ROLE_LABELS: Record<string, string> = {
     doctor:       t("doctorView"),
@@ -223,6 +271,52 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 {ROLE_SHORT[r] ?? r}
               </span>
             ))}
+          </div>
+        )}
+
+        {/* ── Doctor profile card ── */}
+        {doctorProfile && (
+          <div className="mx-3 mt-2 rounded-lg border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/30 dark:border-emerald-800 p-3 space-y-1.5">
+            <p className={cn("text-xs font-bold text-emerald-800 dark:text-emerald-300 truncate", isRTL && "text-right")}>
+              Dr. {doctorProfile.firstName} {doctorProfile.lastName}
+            </p>
+            <p className={cn("text-[11px] text-muted-foreground truncate", isRTL && "text-right")}>
+              {doctorProfile.specialization}
+            </p>
+            <div className={cn("flex items-center gap-1 pt-0.5", isRTL && "flex-row-reverse")}>
+              {editingFee ? (
+                <>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={feeInput}
+                    onChange={e => setFeeInput(e.target.value)}
+                    className="h-6 text-xs px-1.5 w-20"
+                    autoFocus
+                    onKeyDown={e => { if (e.key === "Enter") saveFee(); if (e.key === "Escape") setEditingFee(false); }}
+                  />
+                  <span className="text-[10px] text-muted-foreground">AED</span>
+                  <button onClick={saveFee} disabled={feeMutation.isPending} className="text-emerald-600 hover:text-emerald-700 ml-0.5">
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => setEditingFee(false)} className="text-muted-foreground hover:text-foreground">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                    {doctorProfile.consultationFee ? `AED ${doctorProfile.consultationFee}` : (lang === "ar" ? "رسوم الكشف: غير محددة" : "Fee: not set")}
+                  </span>
+                  {roles.includes("admin") && (
+                    <button onClick={startEditFee} className="ml-auto text-muted-foreground hover:text-foreground transition-colors">
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         )}
       </div>

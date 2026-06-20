@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike } from "drizzle-orm";
 import { db, doctorsTable, appointmentsTable, patientsTable } from "@workspace/db";
+import { requireAuth, getSessionUser } from "../lib/session";
 import {
   ListDoctorsQueryParams,
   CreateDoctorBody,
@@ -57,7 +58,8 @@ router.get("/doctors/:id", async (req, res): Promise<void> => {
   res.json(doctor);
 });
 
-router.patch("/doctors/:id", async (req, res): Promise<void> => {
+router.patch("/doctors/:id", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
   const params = UpdateDoctorParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -68,9 +70,18 @@ router.patch("/doctors/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+
+  const data = { ...parsed.data } as Record<string, unknown>;
+
+  // consultationFee may only be changed by admins
+  if ("consultationFee" in data && !session.roles.includes("admin")) {
+    res.status(403).json({ error: "Only admins may update the consultation fee" });
+    return;
+  }
+
   const [doctor] = await db
     .update(doctorsTable)
-    .set(parsed.data as any)
+    .set(data as any)
     .where(eq(doctorsTable.id, params.data.id))
     .returning();
   if (!doctor) {

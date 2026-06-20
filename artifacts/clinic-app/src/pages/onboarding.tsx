@@ -53,8 +53,13 @@ export default function OnboardingPage() {
   const [extraRoles, setExtraRoles] = useState<Set<string>>(new Set(["doctor"])); // doctor ticked by default
 
   // ── Admin center form ──────────────────────────────────────────────────────
+  const [adminName, setAdminName] = useState("");
   const [centerName, setCenterName] = useState("");
   const [centerAddress, setCenterAddress] = useState("");
+
+  // ── Doctor profile (shown when admin also selected doctor role) ───────────
+  const [doctorSpec, setDoctorSpec] = useState("General Practitioner");
+  const [doctorFee, setDoctorFee] = useState("");
 
   // ── Patient form ───────────────────────────────────────────────────────────
   const [firstName, setFirstName] = useState("");
@@ -83,7 +88,7 @@ export default function OnboardingPage() {
   });
 
   const adminMutation = useMutation({
-    mutationFn: (data: { centerName: string; address?: string }) =>
+    mutationFn: (data: { centerName: string; address?: string; adminName?: string; specialization?: string; consultationFee?: string }) =>
       apiFetch("/users/onboarding/admin", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["auth-me"] }),
   });
@@ -116,7 +121,13 @@ export default function OnboardingPage() {
 
   function handleSubmitAdmin() {
     if (!centerName.trim()) return;
-    adminMutation.mutate({ centerName: centerName.trim(), address: centerAddress || undefined });
+    adminMutation.mutate({
+      centerName: centerName.trim(),
+      address: centerAddress || undefined,
+      adminName: adminName.trim() || undefined,
+      specialization: extraRoles.has("doctor") ? (doctorSpec.trim() || undefined) : undefined,
+      consultationFee: extraRoles.has("doctor") ? (doctorFee.trim() || undefined) : undefined,
+    });
   }
 
   function handleSubmitPatient() {
@@ -268,8 +279,21 @@ export default function OnboardingPage() {
               <CardDescription>This creates your clinic workspace where staff can be added.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
+
+              {/* ── Admin name ── */}
               <div>
-                <Label htmlFor="centerName">Center Name *</Label>
+                <Label htmlFor="adminName">Your Full Name *</Label>
+                <Input
+                  id="adminName"
+                  placeholder="e.g. Dr. Ahmed Al-Mansoori"
+                  value={adminName}
+                  onChange={e => setAdminName(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="centerName">Medical Center Name *</Label>
                 <Input
                   id="centerName"
                   placeholder="e.g. Al Noor Medical Center"
@@ -291,9 +315,42 @@ export default function OnboardingPage() {
                 />
               </div>
 
+              {/* ── Doctor profile (only if doctor role was selected) ── */}
+              {extraRoles.has("doctor") && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
+                  <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide flex items-center gap-1.5">
+                    <Stethoscope className="w-3.5 h-3.5" /> Doctor Profile
+                  </p>
+                  <div>
+                    <Label htmlFor="doctorSpec">Specialization</Label>
+                    <Input
+                      id="doctorSpec"
+                      placeholder="e.g. General Practitioner"
+                      value={doctorSpec}
+                      onChange={e => setDoctorSpec(e.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="doctorFee">Consultation Fee (AED)</Label>
+                    <Input
+                      id="doctorFee"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="e.g. 300"
+                      value={doctorFee}
+                      onChange={e => setDoctorFee(e.target.value)}
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Can be updated later by admin</p>
+                  </div>
+                </div>
+              )}
+
               <Button
                 className="w-full mt-2"
-                disabled={!centerName.trim() || adminMutation.isPending}
+                disabled={!adminName.trim() || !centerName.trim() || adminMutation.isPending}
                 onClick={handleSubmitAdmin}
               >
                 {adminMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
