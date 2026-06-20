@@ -46,6 +46,7 @@ export interface SessionUser {
   patientDbId: number | null;
   aiAssistantEnabled: boolean;
   subscriptionPlan: string;
+  mustChangePassword: boolean;
 }
 
 export async function attachSessionUser(
@@ -140,6 +141,7 @@ export async function attachSessionUser(
       patientDbId,
       aiAssistantEnabled: user.aiAssistantEnabled,
       subscriptionPlan: user.subscriptionPlan,
+      mustChangePassword: user.mustChangePassword,
     } satisfies SessionUser;
 
     next();

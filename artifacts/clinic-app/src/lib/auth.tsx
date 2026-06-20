@@ -20,6 +20,7 @@ export interface AuthUser {
   patientDbId: number | null;
   aiAssistantEnabled: boolean;
   subscriptionPlan: string;
+  mustChangePassword: boolean;
 }
 
 type AuthContextType = {

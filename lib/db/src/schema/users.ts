@@ -14,6 +14,7 @@ export const usersTable = pgTable("users", {
   medicalCenterId: integer("medical_center_id"),
   subscriptionPlan: text("subscription_plan").notNull().default("free"),
   aiAssistantEnabled: boolean("ai_assistant_enabled").notNull().default(false),
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

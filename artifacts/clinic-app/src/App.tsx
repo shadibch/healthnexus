@@ -27,6 +27,7 @@ import ReportsPage from "@/pages/reports";
 import SettingsPage from "@/pages/settings";
 import RemindersPage from "@/pages/reminders";
 import AdminPage from "@/pages/admin";
+import ChangePasswordPage from "@/pages/change-password";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -167,6 +168,11 @@ function AppRoutes() {
         </div>
       </div>
     );
+  }
+
+  // Must change temporary password before accessing anything else
+  if (user.mustChangePassword) {
+    return <ChangePasswordPage />;
   }
 
   // Needs onboarding if not complete or no roles assigned yet

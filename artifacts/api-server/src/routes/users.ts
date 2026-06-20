@@ -4,6 +4,43 @@ import { db, usersTable, medicalCentersTable, staffInvitesTable, doctorsTable, p
 import { requireAuth, getSessionUser, primaryRole } from "../lib/session";
 import { z } from "zod";
 
+const CLERK_API = "https://api.clerk.com/v1";
+
+async function clerkCreateUser(opts: {
+  emailAddress: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+}): Promise<{ id: string }> {
+  const res = await fetch(`${CLERK_API}/users`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email_address: [opts.emailAddress],
+      password: opts.password,
+      first_name: opts.firstName,
+      last_name: opts.lastName,
+      skip_password_checks: true,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as any;
+    const msg = body?.errors?.[0]?.long_message || body?.errors?.[0]?.message || "Failed to create account";
+    throw new Error(msg);
+  }
+  return res.json() as Promise<{ id: string }>;
+}
+
+async function clerkDeleteUser(clerkId: string): Promise<void> {
+  await fetch(`${CLERK_API}/users/${clerkId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}` },
+  }).catch(() => {});
+}
+
 const router: IRouter = Router();
 
 const STAFF_ROLES = ["admin", "doctor", "receptionist", "pharmacist", "pharmacy"] as const;
@@ -160,7 +197,85 @@ router.post("/users/onboarding/patient", requireAuth, async (req, res): Promise<
   res.json({ ok: true, patient });
 });
 
-// ── POST /users/invite-staff ──────────────────────────────────────────────────
+// ── POST /users/create-staff ──────────────────────────────────────────────────
+const CreateStaffBody = z.object({
+  name: z.string().min(2),
+  email: z.string().email(),
+  role: z.enum(["doctor", "pharmacist", "receptionist"]),
+  tempPassword: z.string().min(8),
+  specialization: z.string().optional(),
+});
+
+router.post("/users/create-staff", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
+  if (!session.roles.includes("admin") || !session.medicalCenterId) {
+    res.status(403).json({ error: "Admin only" });
+    return;
+  }
+
+  const parsed = CreateStaffBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const { name, email, role, tempPassword, specialization } = parsed.data;
+  const nameParts = name.trim().split(/\s+/);
+  const firstName = nameParts[0] ?? name;
+  const lastName = nameParts.slice(1).join(" ") || "-";
+
+  let clerkId: string | null = null;
+  try {
+    const clerkUser = await clerkCreateUser({
+      emailAddress: email.toLowerCase(),
+      password: tempPassword,
+      firstName,
+      lastName,
+    });
+    clerkId = clerkUser.id;
+  } catch (err: any) {
+    res.status(409).json({ error: err.message || "Failed to create account in auth system" });
+    return;
+  }
+
+  let dbUser;
+  try {
+    [dbUser] = await db.insert(usersTable).values({
+      clerkId: clerkId!,
+      email: email.toLowerCase(),
+      name: name.trim(),
+      role,
+      roles: [role],
+      medicalCenterId: session.medicalCenterId,
+      onboardingComplete: true,
+      mustChangePassword: true,
+    }).returning();
+  } catch (err) {
+    await clerkDeleteUser(clerkId!);
+    res.status(500).json({ error: "Failed to save user — account creation rolled back" });
+    return;
+  }
+
+  if (role === "doctor") {
+    try {
+      await db.insert(doctorsTable).values({
+        userId: dbUser.id,
+        clerkId: clerkId!,
+        firstName,
+        lastName,
+        specialization: specialization?.trim() || "General Practitioner",
+        email: email.toLowerCase(),
+        medicalCenterId: session.medicalCenterId,
+      });
+    } catch (_) {
+      // non-fatal — doctor record can be updated later
+    }
+  }
+
+  res.json({ ok: true, user: { id: dbUser.id, email: dbUser.email, name: dbUser.name, role } });
+});
+
+// ── POST /users/invite-staff (kept for backward compat) ───────────────────────
 const InviteStaffBody = z.object({
   email: z.string().email(),
   role: z.enum(["doctor", "pharmacist", "receptionist"]),
@@ -190,6 +305,15 @@ router.post("/users/invite-staff", requireAuth, async (req, res): Promise<void> 
   }).returning();
 
   res.json({ ok: true, invite });
+});
+
+// ── POST /users/mark-password-changed ─────────────────────────────────────────
+router.post("/users/mark-password-changed", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
+  await db.update(usersTable)
+    .set({ mustChangePassword: false })
+    .where(eq(usersTable.id, session.userId));
+  res.json({ ok: true });
 });
 
 // ── GET /users/staff ──────────────────────────────────────────────────────────

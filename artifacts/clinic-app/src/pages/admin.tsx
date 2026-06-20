@@ -23,9 +23,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Building2, Users, UserPlus, Mail, Loader2, CheckCircle, Clock, Sparkles,
-  Database, Download, RotateCcw, Trash2, Plus, ShieldAlert, CalendarClock,
-  HardDriveDownload, RefreshCw
+  Building2, Users, UserPlus, Loader2, CheckCircle, Clock, Sparkles,
+  Database, Download, RotateCcw, Trash2, ShieldAlert, CalendarClock,
+  HardDriveDownload, RefreshCw, Eye, EyeOff, Copy, Check, Plus, Mail,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -340,23 +340,35 @@ export default function AdminPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"doctor" | "pharmacist" | "receptionist">("doctor");
+  const [createName, setCreateName] = useState("");
+  const [createEmail, setCreateEmail] = useState("");
+  const [createRole, setCreateRole] = useState<"doctor" | "pharmacist" | "receptionist">("doctor");
+  const [createSpec, setCreateSpec] = useState("");
+  const [createPassword, setCreatePassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const { data, isLoading } = useQuery<{ staff: StaffUser[]; invites: StaffInvite[] }>({
     queryKey: ["staff"],
     queryFn: () => apiFetch("/users/staff"),
   });
 
-  const inviteMutation = useMutation({
-    mutationFn: (body: { email: string; role: string }) =>
-      apiFetch("/users/invite-staff", { method: "POST", body: JSON.stringify(body) }),
-    onSuccess: () => {
+  const createStaffMutation = useMutation({
+    mutationFn: (body: { name: string; email: string; role: string; tempPassword: string; specialization?: string }) =>
+      apiFetch("/users/create-staff", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["staff"] });
-      setInviteEmail("");
-      toast({ title: "Invitation sent", description: `${inviteEmail} will be assigned the ${inviteRole} role when they sign up.` });
+      setCreateName("");
+      setCreateEmail("");
+      setCreateRole("doctor");
+      setCreateSpec("");
+      setCreatePassword("");
+      toast({
+        title: "Account created",
+        description: `${vars.email} can now sign in with the temporary password you set. They'll be asked to change it on first login.`,
+      });
     },
-    onError: (e: Error) => toast({ title: "Failed to invite", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Failed to create account", description: e.message, variant: "destructive" }),
   });
 
   const toggleAIMutation = useMutation({
@@ -377,32 +389,45 @@ export default function AdminPage() {
         <p className="text-muted-foreground text-sm mt-1">Manage your medical center staff, AI access, and data backups</p>
       </div>
 
-      {/* ── Invite Staff ── */}
+      {/* ── Create Staff Account ── */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <UserPlus className="w-5 h-5 text-primary" /> Invite Staff Member
+            <UserPlus className="w-5 h-5 text-primary" /> Create Staff Account
           </CardTitle>
           <CardDescription>
-            Enter their email and role. They'll be automatically assigned when they sign up.
+            Create a login for a staff member. They'll sign in with the temporary password you set and will be prompted to change it on first login.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex gap-3 flex-wrap">
-            <div className="flex-1 min-w-48">
-              <Label htmlFor="inviteEmail">Email address</Label>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="createName">Full Name</Label>
               <Input
-                id="inviteEmail"
-                type="email"
-                placeholder="doctor@example.com"
-                value={inviteEmail}
-                onChange={e => setInviteEmail(e.target.value)}
+                id="createName"
+                placeholder="e.g. Dr. Sarah Al-Mansoori"
+                value={createName}
+                onChange={e => setCreateName(e.target.value)}
                 className="mt-1"
               />
             </div>
-            <div className="w-44">
+            <div>
+              <Label htmlFor="createEmail">Email Address</Label>
+              <Input
+                id="createEmail"
+                type="email"
+                placeholder="staff@clinic.ae"
+                value={createEmail}
+                onChange={e => setCreateEmail(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
               <Label>Role</Label>
-              <Select value={inviteRole} onValueChange={(v: any) => setInviteRole(v)}>
+              <Select value={createRole} onValueChange={(v: any) => setCreateRole(v)}>
                 <SelectTrigger className="mt-1">
                   <SelectValue />
                 </SelectTrigger>
@@ -413,16 +438,73 @@ export default function AdminPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-end">
-              <Button
-                onClick={() => inviteMutation.mutate({ email: inviteEmail, role: inviteRole })}
-                disabled={!inviteEmail || inviteMutation.isPending}
-              >
-                {inviteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Mail className="w-4 h-4 mr-2" />}
-                Send Invite
-              </Button>
-            </div>
+            {createRole === "doctor" && (
+              <div>
+                <Label htmlFor="createSpec">Specialization</Label>
+                <Input
+                  id="createSpec"
+                  placeholder="e.g. Cardiology"
+                  value={createSpec}
+                  onChange={e => setCreateSpec(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+            )}
           </div>
+
+          <div>
+            <Label htmlFor="createPassword">Temporary Password</Label>
+            <div className="relative mt-1 flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  id="createPassword"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Min. 8 characters"
+                  value={createPassword}
+                  onChange={e => setCreatePassword(e.target.value)}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowPassword(v => !v)}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {createPassword && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  title="Copy password"
+                  onClick={() => {
+                    navigator.clipboard.writeText(createPassword);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                >
+                  {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Share this with the staff member — they'll be required to change it on first login.</p>
+          </div>
+
+          <Button
+            onClick={() => createStaffMutation.mutate({
+              name: createName,
+              email: createEmail,
+              role: createRole,
+              tempPassword: createPassword,
+              specialization: createSpec || undefined,
+            })}
+            disabled={!createName || !createEmail || createPassword.length < 8 || createStaffMutation.isPending}
+          >
+            {createStaffMutation.isPending
+              ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Creating…</>
+              : <><UserPlus className="w-4 h-4 mr-2" />Create Account</>}
+          </Button>
         </CardContent>
       </Card>
 
