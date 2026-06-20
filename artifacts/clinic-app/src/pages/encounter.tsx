@@ -528,7 +528,35 @@ export default function EncounterPage() {
 
   const removeRxItem = (index: number) => setRxItems((prev) => prev.filter((_, i) => i !== index));
 
-  // ── Loading state ─────────────────────────────────────────────────────────
+  // ── Derived values (must stay before any early return — Rules of Hooks) ─────
+  const isPregnant =
+    visitReason === "pregnancy" ||
+    chiefComplaint.toLowerCase().includes("pregnan") ||
+    chiefComplaint.includes("حمل");
+
+  const drugAlerts = useMemo<DrugAlert[]>(() => {
+    const allMeds = [
+      ...rxItems.map((r) => r.medication),
+      ...(rxMed ? [rxMed] : []),
+    ];
+    if (allMeds.length === 0) return [];
+    const alerts: DrugAlert[] = [];
+    // Allergy conflicts
+    for (const med of allMeds) {
+      const a = checkAllergyAlert(med, patient?.allergies ?? null);
+      if (a) alerts.push(a);
+    }
+    // Drug–drug interactions
+    alerts.push(...checkInteractions(allMeds));
+    // Pregnancy contraindications
+    if (isPregnant) {
+      alerts.push(...checkPregnancyAlerts(allMeds));
+    }
+    // Deduplicate by message
+    return alerts.filter((a, i, arr) => arr.findIndex((b) => b.message === a.message) === i);
+  }, [rxItems, rxMed, isPregnant, patient?.allergies]);
+
+  // ── Early returns (after ALL hooks) ──────────────────────────────────────
   if (loadingAppt) {
     return (
       <div className="space-y-4 max-w-5xl">
@@ -560,33 +588,6 @@ export default function EncounterPage() {
   const age = patient?.dateOfBirth
     ? Math.floor((Date.now() - new Date(patient.dateOfBirth).getTime()) / (365.25 * 24 * 3600 * 1000))
     : null;
-
-  const isPregnant =
-    visitReason === "pregnancy" ||
-    chiefComplaint.toLowerCase().includes("pregnan") ||
-    chiefComplaint.includes("حمل");
-
-  const drugAlerts = useMemo<DrugAlert[]>(() => {
-    const allMeds = [
-      ...rxItems.map((r) => r.medication),
-      ...(rxMed ? [rxMed] : []),
-    ];
-    if (allMeds.length === 0) return [];
-    const alerts: DrugAlert[] = [];
-    // Allergy conflicts
-    for (const med of allMeds) {
-      const a = checkAllergyAlert(med, patient?.allergies ?? null);
-      if (a) alerts.push(a);
-    }
-    // Drug–drug interactions
-    alerts.push(...checkInteractions(allMeds));
-    // Pregnancy contraindications
-    if (isPregnant) {
-      alerts.push(...checkPregnancyAlerts(allMeds));
-    }
-    // Deduplicate by message
-    return alerts.filter((a, i, arr) => arr.findIndex((b) => b.message === a.message) === i);
-  }, [rxItems, rxMed, isPregnant, patient?.allergies]);
 
   const isCompleted = encounter?.status === "completed";
   const hasEncounter = activeEncounterId != null;
