@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useRole } from "@/lib/role";
 import { useI18n } from "@/lib/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -549,7 +550,8 @@ export default function AppointmentsPage() {
   const { lang, isRTL } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const isPatient = user?.role === "patient";
+  const { hasRole } = useRole();
+  const isPatient = hasRole("patient");
 
   const [bookOpen, setBookOpen] = useState(false);
   const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null);

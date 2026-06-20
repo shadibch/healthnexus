@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
+import { useRole } from "@/lib/role";
 import {
   useClinicSettings,
   CLINIC_SETTINGS_QUERY_KEY,
@@ -82,7 +83,8 @@ export default function SettingsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saved.isLoading]);
 
-  const isAdmin = user?.role === "doctor" || user?.role === "receptionist";
+  const { hasRole } = useRole();
+  const isAdmin = hasRole("doctor") || hasRole("receptionist");
 
   const displayName = name.trim() !== "" ? name : saved.clinicName;
   const displayLogo = logoChanged ? logoPreview : saved.logoBase64;

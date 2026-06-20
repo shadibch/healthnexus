@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { apiFetch } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
+import { useRole } from "@/lib/role";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -71,7 +72,8 @@ export default function QueuePage() {
   const active = queue?.filter((q) => !["completed", "cancelled", "no_show"].includes(q.status)) ?? [];
   const done   = queue?.filter((q) => ["completed", "cancelled", "no_show"].includes(q.status)) ?? [];
 
-  const isDoctor = user?.role === "doctor";
+  const { hasRole } = useRole();
+  const isDoctor = hasRole("doctor");
 
   const QueueCard = ({ item }: { item: QueueItem }) => {
     const config = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.scheduled;

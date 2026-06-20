@@ -4,6 +4,7 @@ import ActivitiesPanel from "@/components/ActivitiesPanel";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useRole } from "@/lib/role";
 import { useI18n } from "@/lib/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -316,6 +317,7 @@ export default function EncounterPage() {
   const { appointmentId } = useParams<{ appointmentId: string }>();
   const [, navigate] = useLocation();
   const { user } = useAuth();
+  const { hasRole } = useRole();
   const { lang, isRTL } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -1180,7 +1182,7 @@ export default function EncounterPage() {
                   activityTotal={0}
                   lang={lang}
                   isRTL={isRTL}
-                  canEdit={user?.role === "receptionist" || user?.role === "doctor"}
+                  canEdit={hasRole("receptionist") || hasRole("doctor")}
                   queryKey={["encounter", activeEncounterId]}
                 />
               )}
