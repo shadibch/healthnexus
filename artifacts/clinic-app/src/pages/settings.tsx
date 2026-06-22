@@ -4,6 +4,7 @@ import { apiFetch } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
 import { useRole } from "@/lib/role";
+import { LocationPickerMap } from "@/components/LocationPickerMap";
 import {
   useClinicSettings,
   CLINIC_SETTINGS_QUERY_KEY,
@@ -661,12 +662,12 @@ export default function SettingsPage() {
               <div>
                 <p className="text-xs font-semibold flex items-center gap-1">
                   <Navigation className="w-3.5 h-3.5 text-primary" />
-                  {tr("GPS Coordinates", "الإحداثيات الجغرافية")}
+                  {tr("Map Location", "موقع على الخريطة")}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {tr(
-                    "Decimal degrees format (e.g. 24.4539, 54.3773). Auto-fill from the address above, or enter manually.",
-                    "نظام الدرجات العشرية (مثال: 24.4539، 54.3773). تعبئة تلقائية من العنوان أعلاه أو إدخال يدوي."
+                    "Click on the map to pin your clinic, drag the marker to adjust, or use the button to auto-fill from the address above.",
+                    "انقر على الخريطة لتحديد موقع العيادة، أو اسحب الدبوس للضبط، أو استخدم الزر لملء الإحداثيات من العنوان."
                   )}
                 </p>
               </div>
@@ -689,6 +690,19 @@ export default function SettingsPage() {
               </Button>
             </div>
 
+            {/* Interactive map picker */}
+            <LocationPickerMap
+              lat={latitude}
+              lng={longitude}
+              onChange={(lat, lng) => {
+                setLatitude(lat);
+                setLongitude(lng);
+                setGeoError("");
+              }}
+              height={300}
+            />
+
+            {/* Coordinate read-out / fine-tune inputs */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="latitude" className="text-xs font-medium">
@@ -729,7 +743,7 @@ export default function SettingsPage() {
             {geoSuccess && (
               <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-400">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                {tr("Coordinates fetched successfully — verify and save.", "تم جلب الإحداثيات — تحقق منها واحفظ.")}
+                {tr("Location pinned on map — review and save.", "تم تحديد الموقع على الخريطة — راجع واحفظ.")}
               </div>
             )}
             {geoError && (
@@ -737,18 +751,6 @@ export default function SettingsPage() {
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 {geoError}
               </div>
-            )}
-
-            {latitude && longitude && !isNaN(parseFloat(latitude)) && !isNaN(parseFloat(longitude)) && (
-              <a
-                href={`https://www.google.com/maps?q=${latitude},${longitude}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-              >
-                <MapPin className="w-3 h-3" />
-                {tr("Preview on Google Maps ↗", "معاينة على خرائط جوجل ↗")}
-              </a>
             )}
           </div>
         </CardContent>

@@ -50,7 +50,7 @@ interface Prescription {
   items: PrescriptionItem[];
 }
 
-type TabType = "doctors" | "pharmacies" | "prescription";
+type TabType = "doctors" | "pharmacies" | "prescription" | "clinic";
 
 function kmLabel(km: number, ar: boolean) {
   if (km < 1) return ar ? `${Math.round(km * 1000)} م` : `${Math.round(km * 1000)} m`;
@@ -60,7 +60,15 @@ function kmLabel(km: number, ar: boolean) {
 export default function MapPage() {
   const { lang, isRTL } = useI18n();
   const { user } = useAuth();
-  const { currency } = useClinicSettings();
+  const {
+    currency,
+    clinicName,
+    latitude: clinicLat,
+    longitude: clinicLng,
+    address: clinicAddress,
+    city: clinicCity,
+    country: clinicCountry,
+  } = useClinicSettings();
   const ar = lang === "ar";
 
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
@@ -250,6 +258,28 @@ export default function MapPage() {
         });
       }
 
+      if (tab === "clinic" && clinicLat != null && clinicLng != null) {
+        const clinicIcon = L.divIcon({
+          className: "",
+          html: `<div style="background:#059669;width:46px;height:46px;border-radius:50%;border:4px solid white;display:flex;align-items:center;justify-content:center;color:white;font-size:18px;box-shadow:0 4px 12px rgba(0,0,0,0.4)">🏥</div>`,
+          iconSize: [46, 46],
+          iconAnchor: [23, 23],
+          popupAnchor: [0, -24],
+        });
+        const locationParts = [clinicAddress, clinicCity, clinicCountry].filter(Boolean).join(", ");
+        const m = L.marker([clinicLat, clinicLng], { icon: clinicIcon })
+          .addTo(map)
+          .bindPopup(
+            `<div style="min-width:200px">
+              <b style="font-size:14px">${clinicName}</b><br/>
+              ${locationParts ? `<span style="color:#6b7280;font-size:12px">📍 ${locationParts}</span>` : ""}
+            </div>`,
+            { maxWidth: 260 }
+          )
+          .openPopup();
+        markersRef.current.push(m);
+      }
+
       if (tab === "prescription") {
         const results = prescriptionCheckQuery.data?.pharmacies ?? customCheckQuery.data ?? [];
         results.forEach((p) => {
@@ -291,10 +321,20 @@ export default function MapPage() {
   const checkResults = prescriptionCheckQuery.data?.pharmacies ?? [];
   const isChecking = prescriptionCheckQuery.isFetching;
 
+  // ── Fly to clinic when tab changes to "clinic" ────────────────────────
+  useEffect(() => {
+    if (tab !== "clinic") return;
+    if (clinicLat == null || clinicLng == null) return;
+    const map = mapRef.current;
+    if (!map) return;
+    map.flyTo([clinicLat, clinicLng], 16, { animate: true, duration: 1 });
+  }, [tab, clinicLat, clinicLng]);
+
   const TABS: { id: TabType; label: string; labelAr: string; icon: React.ReactNode }[] = [
-    { id: "doctors",      label: "Nearby Doctors",  labelAr: "أقرب الأطباء",    icon: <Stethoscope className="w-3.5 h-3.5" /> },
-    { id: "pharmacies",   label: "Pharmacies",       labelAr: "الصيدليات",       icon: <Pill className="w-3.5 h-3.5" /> },
+    { id: "doctors",      label: "Nearby Doctors",   labelAr: "أقرب الأطباء",    icon: <Stethoscope className="w-3.5 h-3.5" /> },
+    { id: "pharmacies",   label: "Pharmacies",        labelAr: "الصيدليات",       icon: <Pill className="w-3.5 h-3.5" /> },
     { id: "prescription", label: "Check Prescription",labelAr: "فحص الوصفة",     icon: <Search className="w-3.5 h-3.5" /> },
+    { id: "clinic",       label: "Our Clinic",        labelAr: "عيادتنا",         icon: <Building2 className="w-3.5 h-3.5" /> },
   ];
 
   return (
@@ -647,6 +687,91 @@ export default function MapPage() {
                 )}
               </div>
             )}
+
+            {/* ── OUR CLINIC tab ── */}
+            {tab === "clinic" && (
+              <div className="p-4 space-y-4">
+                {clinicLat != null && clinicLng != null ? (
+                  <>
+                    {/* Clinic identity card */}
+                    <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50/60 to-teal-50/40 dark:from-emerald-950/30 dark:to-teal-950/20 dark:border-emerald-800 p-4 space-y-3">
+                      <div className={cn("flex items-center gap-3", isRTL && "flex-row-reverse")}>
+                        <div className="w-12 h-12 rounded-xl bg-emerald-600 flex items-center justify-center shrink-0 text-2xl shadow-sm">
+                          🏥
+                        </div>
+                        <div className={cn(isRTL && "text-right")}>
+                          <p className="font-bold text-base leading-tight">{clinicName}</p>
+                          <p className="text-xs text-emerald-700 dark:text-emerald-400 font-medium mt-0.5">
+                            {ar ? "المركز الطبي" : "Medical Center"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {(clinicAddress || clinicCity || clinicCountry) && (
+                        <div className={cn("flex items-start gap-2", isRTL && "flex-row-reverse")}>
+                          <MapPin className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                          <div className={cn("text-sm", isRTL && "text-right")}>
+                            {clinicAddress && <p className="font-medium">{clinicAddress}</p>}
+                            {(clinicCity || clinicCountry) && (
+                              <p className="text-muted-foreground text-xs mt-0.5">
+                                {[clinicCity, clinicCountry].filter(Boolean).join(", ")}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className={cn("flex items-center gap-2 pt-1", isRTL && "flex-row-reverse")}>
+                        <span className="text-xs font-mono text-muted-foreground bg-muted rounded px-2 py-0.5">
+                          {clinicLat.toFixed(5)}, {clinicLng.toFixed(5)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="space-y-2">
+                      <a
+                        href={`https://www.google.com/maps?q=${clinicLat},${clinicLng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 w-full rounded-lg border border-border bg-card hover:bg-muted/40 transition-colors px-3 py-2.5 text-sm font-medium"
+                      >
+                        <Navigation className="w-4 h-4 text-primary" />
+                        {ar ? "الحصول على الاتجاهات ↗" : "Get Directions ↗"}
+                      </a>
+                      <button
+                        className="flex items-center justify-center gap-2 w-full rounded-lg border border-border bg-card hover:bg-muted/40 transition-colors px-3 py-2.5 text-sm font-medium"
+                        onClick={() => {
+                          mapRef.current?.setView([clinicLat!, clinicLng!], 17);
+                        }}
+                      >
+                        <MapPin className="w-4 h-4 text-primary" />
+                        {ar ? "تكبير الموقع على الخريطة" : "Zoom to location"}
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground text-center">
+                      {ar
+                        ? "انقر على الدبوس على الخريطة لعرض التفاصيل"
+                        : "Click the pin on the map to see details"}
+                    </p>
+                  </>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-2">
+                    <Building2 className="w-10 h-10 mx-auto text-muted-foreground/30" />
+                    <p className="text-sm font-medium text-muted-foreground">
+                      {ar ? "لم يتم تحديد موقع العيادة بعد" : "Clinic location not configured yet"}
+                    </p>
+                    <p className="text-xs text-muted-foreground/70">
+                      {ar
+                        ? "يمكن للمسؤول تحديد الموقع من صفحة الإعدادات"
+                        : "An admin can set the location in Settings → Location"}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
 
           {/* Legend footer */}
