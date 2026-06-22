@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiFetch } from "@/lib/api";
@@ -5,6 +6,7 @@ import { useI18n } from "@/lib/i18n";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Stethoscope,
@@ -19,6 +21,8 @@ import {
   Clock,
   CornerDownRight,
   ArrowUpRight,
+  Search,
+  X,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -67,6 +71,7 @@ interface Consultation {
 export default function ConsultationsPage() {
   const { t, lang, isRTL } = useI18n();
   const [, navigate] = useLocation();
+  const [search, setSearch] = useState("");
 
   const STATUS_COLORS: Record<string, string> = {
     in_progress: "bg-amber-100 text-amber-800 border-amber-300",
@@ -86,23 +91,58 @@ export default function ConsultationsPage() {
 
   const { data: consultations, isLoading } = useQuery<Consultation[]>({
     queryKey: ["consultations"],
-    queryFn: () => apiFetch("/consultations?limit=30"),
+    queryFn: () => apiFetch("/consultations?limit=100"),
     refetchInterval: 20000,
+  });
+
+  const ar = lang === "ar";
+
+  const filtered = consultations?.filter((c) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      c.patientName?.toLowerCase().includes(q) ||
+      c.doctorName?.toLowerCase().includes(q) ||
+      c.chiefComplaint?.toLowerCase().includes(q) ||
+      c.diagnosis?.toLowerCase().includes(q)
+    );
   });
 
   return (
     <div className="space-y-4">
-      <div className={cn(isRTL && "text-right")}>
-        <h1 className="text-2xl font-bold">{t("consultations")}</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {consultations?.length ?? 0} {t("records")}
-        </p>
+      <div className={cn("flex items-start justify-between gap-3 flex-wrap", isRTL && "flex-row-reverse")}>
+        <div className={cn(isRTL && "text-right")}>
+          <h1 className="text-2xl font-bold">{t("consultations")}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {filtered?.length ?? consultations?.length ?? 0}{search.trim() ? ` ${ar ? "نتيجة" : "results"}` : ""} {ar ? "سجل" : t("records")}
+          </p>
+        </div>
+      </div>
+
+      {/* Search bar */}
+      <div className="relative">
+        <Search className={cn("absolute top-2.5 w-4 h-4 text-muted-foreground pointer-events-none", isRTL ? "right-3" : "left-3")} />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={ar ? "ابحث بالمريض، التشخيص، الشكوى…" : "Search by patient, diagnosis, complaint…"}
+          className={cn("h-9 text-sm", isRTL ? "pr-9 pl-9 text-right" : "pl-9 pr-9")}
+          dir={isRTL ? "rtl" : "ltr"}
+        />
+        {search && (
+          <button
+            onClick={() => setSearch("")}
+            className={cn("absolute top-2.5 text-muted-foreground hover:text-foreground", isRTL ? "left-3" : "right-3")}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       <div className="space-y-3">
         {isLoading
           ? [1, 2, 3].map((i) => <Skeleton key={i} className="h-40 w-full" />)
-          : consultations?.length === 0
+          : filtered?.length === 0
           ? (
             <Card className="border-dashed border-border">
               <CardContent className="py-16 text-center">
@@ -111,7 +151,7 @@ export default function ConsultationsPage() {
               </CardContent>
             </Card>
           )
-          : consultations?.map((c) => {
+          : filtered?.map((c) => {
             const encTypeCfg = ENCOUNTER_TYPE_CFG[c.encounterType] ?? ENCOUNTER_TYPE_CFG.initial;
             const isFollowUp = c.encounterType === "follow_up";
             return (

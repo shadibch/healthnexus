@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import { useParams, useLocation } from "wouter";
 import ActivitiesPanel from "@/components/ActivitiesPanel";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -431,6 +431,7 @@ export default function EncounterPage() {
   const apptId = parseInt(appointmentId ?? "0");
 
   const [addOrderOpen, setAddOrderOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [pendingOrderType, setPendingOrderType] = useState<string | null>(null);
   const [pendingOrderName, setPendingOrderName] = useState<string | null>(null);
   const [resultOrder, setResultOrder] = useState<MedicalOrder | null>(null);
@@ -700,8 +701,12 @@ export default function EncounterPage() {
   const hasEncounter = activeEncounterId != null;
   const isEncounterLoading = hasEncounter && loadingEncounter;
 
+  const prevEncounters = pastEncounters?.filter((e) => e.id !== activeEncounterId) ?? [];
+  const hasPrevEncounters = prevEncounters.length > 0;
+
   return (
-    <div className={cn("space-y-4 max-w-5xl", isRTL && "font-arabic")} dir={isRTL ? "rtl" : "ltr"}>
+    <Fragment>
+    <div className={cn("space-y-4 max-w-5xl", isRTL && "font-arabic", hasPrevEncounters && "pb-20")} dir={isRTL ? "rtl" : "ltr"}>
       {/* ── Header ── */}
       <div className={cn("flex items-center gap-3", isRTL && "flex-row-reverse")}>
         <Button variant="ghost" size="sm" onClick={() => navigate("/queue")} className="gap-1 shrink-0">
@@ -1556,5 +1561,148 @@ export default function EncounterPage() {
       )}
       <ResultDialog order={resultOrder} onClose={() => setResultOrder(null)} />
     </div>
+
+    {/* ── Fixed bottom floating history card (only on return visits) ── */}
+    {hasPrevEncounters && (
+      <div
+        className={cn(
+          "fixed bottom-0 left-0 right-0 md:left-64 z-40 transition-all duration-300",
+          isRTL && "md:left-0 md:right-64"
+        )}
+        dir={isRTL ? "rtl" : "ltr"}
+      >
+        {/* Collapsed bar */}
+        {!historyOpen && (
+          <button
+            onClick={() => setHistoryOpen(true)}
+            className={cn(
+              "w-full flex items-center justify-between gap-3 px-5 py-2.5",
+              "bg-violet-700 text-white text-sm font-medium shadow-2xl",
+              "hover:bg-violet-800 transition-colors",
+              isRTL && "flex-row-reverse"
+            )}
+          >
+            <div className={cn("flex items-center gap-2", isRTL && "flex-row-reverse")}>
+              <History className="w-4 h-4 shrink-0" />
+              <span>
+                {lang === "ar"
+                  ? `${prevEncounters.length} زيارة سابقة — ${appointment?.patientName ?? ""}`
+                  : `${prevEncounters.length} previous encounter${prevEncounters.length > 1 ? "s" : ""} — ${appointment?.patientName ?? ""}`}
+              </span>
+              {prevEncounters[0]?.diagnosis && (
+                <span className="hidden sm:inline text-violet-200 text-xs font-normal truncate max-w-xs">
+                  · {lang === "ar" ? "آخر تشخيص:" : "Last Dx:"} {prevEncounters[0].diagnosis}
+                </span>
+              )}
+            </div>
+            <span className="text-violet-200 text-xs underline underline-offset-2">
+              {lang === "ar" ? "عرض" : "View"}
+            </span>
+          </button>
+        )}
+
+        {/* Expanded panel */}
+        {historyOpen && (
+          <div className="bg-card border-t border-border shadow-2xl max-h-[55vh] flex flex-col">
+            {/* Panel header */}
+            <div className={cn(
+              "flex items-center justify-between px-4 py-2.5 border-b border-border bg-violet-700 text-white shrink-0",
+              isRTL && "flex-row-reverse"
+            )}>
+              <div className={cn("flex items-center gap-2", isRTL && "flex-row-reverse")}>
+                <History className="w-4 h-4" />
+                <span className="text-sm font-semibold">
+                  {lang === "ar" ? `آخر ${Math.min(prevEncounters.length, 3)} زيارات — ${appointment?.patientName ?? ""}` : `Last ${Math.min(prevEncounters.length, 3)} visits — ${appointment?.patientName ?? ""}`}
+                </span>
+              </div>
+              <button
+                onClick={() => setHistoryOpen(false)}
+                className="text-violet-200 hover:text-white p-1 rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Scrollable encounter list */}
+            <div className="overflow-y-auto flex-1 p-3 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {prevEncounters.slice(0, 3).map((enc) => {
+                const info = ORDER_TYPES.find((t) => t.value === enc.orders?.[0]?.type) ?? ORDER_TYPES[6];
+                return (
+                  <div
+                    key={enc.id}
+                    className="rounded-lg border border-border bg-muted/20 p-3 space-y-2 hover:bg-muted/40 transition-colors"
+                  >
+                    <div className={cn("flex items-center justify-between gap-1 flex-wrap", isRTL && "flex-row-reverse")}>
+                      <div className={cn("flex items-center gap-1.5 flex-wrap", isRTL && "flex-row-reverse")}>
+                        <Badge
+                          variant="outline"
+                          className={cn("text-xs", enc.encounterType === "follow_up"
+                            ? "text-amber-700 border-amber-300"
+                            : enc.encounterType === "emergency"
+                            ? "text-red-700 border-red-300"
+                            : "text-blue-700 border-blue-300"
+                          )}
+                        >
+                          {enc.encounterType === "follow_up"
+                            ? (lang === "ar" ? "متابعة" : "Follow-up")
+                            : enc.encounterType === "emergency"
+                            ? (lang === "ar" ? "طارئ" : "Emergency")
+                            : (lang === "ar" ? "أولي" : "Initial")}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDistanceToNow(new Date(enc.createdAt), { addSuffix: true })}
+                        </span>
+                      </div>
+                      <Badge
+                        variant="secondary"
+                        className={cn("text-xs", enc.status === "completed" ? "text-emerald-700" : "text-amber-700")}
+                      >
+                        {enc.status === "completed"
+                          ? (lang === "ar" ? "مكتمل" : "Done")
+                          : (lang === "ar" ? "جارٍ" : "Open")}
+                      </Badge>
+                    </div>
+
+                    {enc.chiefComplaint && (
+                      <p className={cn("text-xs line-clamp-1 text-muted-foreground", isRTL && "text-right")}>
+                        <span className="font-medium text-foreground">{lang === "ar" ? "الشكوى:" : "CC:"}</span> {enc.chiefComplaint}
+                      </p>
+                    )}
+                    {enc.diagnosis && (
+                      <div className="px-2 py-1 bg-blue-50 dark:bg-blue-950/30 rounded text-xs border border-blue-100 dark:border-blue-900">
+                        <span className="font-semibold text-blue-700 dark:text-blue-400">{lang === "ar" ? "تشخيص: " : "Dx: "}</span>
+                        <span className="text-blue-800 dark:text-blue-300 line-clamp-1">{enc.diagnosis}</span>
+                      </div>
+                    )}
+                    {enc.orders && enc.orders.length > 0 && (
+                      <div className={cn("flex flex-wrap gap-1", isRTL && "flex-row-reverse")}>
+                        {enc.orders.slice(0, 4).map((o) => {
+                          const ot = ORDER_TYPES.find((t) => t.value === o.type) ?? ORDER_TYPES[6];
+                          const Icon = ot.icon;
+                          return (
+                            <span key={o.id} className={cn("text-[10px] px-1.5 py-0.5 rounded border flex items-center gap-0.5", ot.color)}>
+                              <Icon className="w-2.5 h-2.5" />{o.name}
+                            </span>
+                          );
+                        })}
+                        {enc.orders.length > 4 && (
+                          <span className="text-[10px] text-muted-foreground">+{enc.orders.length - 4}</span>
+                        )}
+                      </div>
+                    )}
+                    {enc.doctorName && (
+                      <p className={cn("text-[11px] text-muted-foreground flex items-center gap-1", isRTL && "flex-row-reverse")}>
+                        <Stethoscope className="w-2.5 h-2.5" />{enc.doctorName}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    )}
+    </Fragment>
   );
 }
