@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronRight, Clock, Users, CheckCircle2, AlertCircle, Stethoscope } from "lucide-react";
+import { Clock, Users, CheckCircle2, AlertCircle, Stethoscope, Play, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -50,6 +50,8 @@ export default function QueuePage() {
     refetchInterval: 15000,
   });
 
+  const [noShowing, setNoShowing] = useState<number | null>(null);
+
   const advanceMutation = useMutation({
     mutationFn: (appointmentId: number) =>
       apiFetch(`/queue/${appointmentId}/advance`, { method: "POST" }),
@@ -62,6 +64,21 @@ export default function QueuePage() {
     onError: (e: Error) => {
       toast({ title: t("error"), description: e.message, variant: "destructive" });
       setAdvancing(null);
+    },
+  });
+
+  const noShowMutation = useMutation({
+    mutationFn: (appointmentId: number) =>
+      apiFetch(`/queue/${appointmentId}/no-show`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["queue"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      toast({ title: isRTL ? "تم تحديد المريض كغائب" : "Patient marked as no-show" });
+      setNoShowing(null);
+    },
+    onError: (e: Error) => {
+      toast({ title: t("error"), description: e.message, variant: "destructive" });
+      setNoShowing(null);
     },
   });
 
@@ -78,14 +95,15 @@ export default function QueuePage() {
   const QueueCard = ({ item }: { item: QueueItem }) => {
     const config = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.scheduled;
     const canAdvance = isDoctor && ["scheduled", "confirmed", "in_progress"].includes(item.status);
-    // Allow opening encounter for ANY active appointment (scheduled/confirmed/in_progress)
+    const isFirstStage = item.status === "scheduled";
     const canOpenEncounter = isDoctor && ["scheduled", "confirmed", "in_progress"].includes(item.status);
     const time = new Date(item.scheduledAt).toLocaleTimeString(isRTL ? "ar-AE" : "en-AE", {
       hour: "2-digit", minute: "2-digit",
     });
     const advanceLabel =
-      item.status === "scheduled" ? t("confirm") :
-      item.status === "confirmed"  ? t("start") : t("complete");
+      item.status === "scheduled" ? (isRTL ? "بدء" : "Start") :
+      item.status === "confirmed"  ? (isRTL ? "بدء" : "Start") :
+      (isRTL ? "إنهاء" : "Complete");
 
     return (
       <Card className={cn("border transition-all", config.bg)}>
@@ -122,8 +140,8 @@ export default function QueuePage() {
             </div>
 
             {/* Action buttons */}
-            <div className={cn("flex items-center gap-2 shrink-0", isRTL && "flex-row-reverse")}>
-              {/* Open Encounter button — available for any active appointment */}
+            <div className={cn("flex items-center gap-2 shrink-0 flex-wrap justify-end", isRTL && "flex-row-reverse")}>
+              {/* Open Encounter button */}
               {canOpenEncounter && (
                 <Button
                   size="sm"
@@ -135,8 +153,42 @@ export default function QueuePage() {
                 </Button>
               )}
 
-              {/* Advance queue status */}
-              {canAdvance && (
+              {/* First stage (scheduled): Start + No Show */}
+              {canAdvance && isFirstStage && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setAdvancing(item.appointmentId);
+                      advanceMutation.mutate(item.appointmentId);
+                    }}
+                    disabled={advancing === item.appointmentId}
+                    className="gap-1 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                  >
+                    {advancing === item.appointmentId ? "..." : (
+                      <><Play className="w-3 h-3 fill-emerald-600" />{advanceLabel}</>
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setNoShowing(item.appointmentId);
+                      noShowMutation.mutate(item.appointmentId);
+                    }}
+                    disabled={noShowing === item.appointmentId}
+                    className="gap-1 text-xs border-red-200 text-red-600 hover:bg-red-50"
+                  >
+                    {noShowing === item.appointmentId ? "..." : (
+                      <><XCircle className="w-3.5 h-3.5" />{isRTL ? "غائب" : "No Show"}</>
+                    )}
+                  </Button>
+                </>
+              )}
+
+              {/* Other stages: single advance button */}
+              {canAdvance && !isFirstStage && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -148,12 +200,7 @@ export default function QueuePage() {
                   className="gap-1 text-xs"
                 >
                   {advancing === item.appointmentId ? "..." : (
-                    <>
-                      {item.status === "in_progress"
-                        ? <CheckCircle2 className="w-3.5 h-3.5" />
-                        : <ChevronRight className={cn("w-3.5 h-3.5", isRTL && "rotate-180")} />}
-                      {advanceLabel}
-                    </>
+                    <><CheckCircle2 className="w-3.5 h-3.5" />{advanceLabel}</>
                   )}
                 </Button>
               )}

@@ -5,7 +5,7 @@ import { AdvanceQueueParams } from "@workspace/api-zod";
 import { requireAuth, getSessionUser } from "../lib/session";
 
 const router: IRouter = Router();
-const STATUS_ORDER = ["scheduled", "confirmed", "in_progress", "completed"];
+const STATUS_ORDER = ["scheduled", "in_progress", "completed"];
 
 router.get("/queue", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
@@ -115,6 +115,36 @@ router.post("/queue/:appointmentId/advance", requireAuth, async (req, res): Prom
     notes: updated.notes,
     waitingCount,
   });
+});
+
+router.post("/queue/:appointmentId/no-show", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
+  const params = AdvanceQueueParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [appointment] = await db
+    .select()
+    .from(appointmentsTable)
+    .where(eq(appointmentsTable.id, params.data.appointmentId));
+  if (!appointment) {
+    res.status(404).json({ error: "Appointment not found" });
+    return;
+  }
+
+  if (session.roles.includes("doctor") && session.doctorDbId !== appointment.doctorId) {
+    res.status(403).json({ error: "Not authorized to manage this appointment" });
+    return;
+  }
+
+  await db
+    .update(appointmentsTable)
+    .set({ status: "no_show" })
+    .where(eq(appointmentsTable.id, params.data.appointmentId));
+
+  res.json({ success: true });
 });
 
 export default router;

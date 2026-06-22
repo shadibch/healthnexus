@@ -9,6 +9,7 @@ import { printPrescription } from "@/lib/print-prescription";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -17,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Pill, Clock, CheckCircle2, User, Stethoscope, MapPin, Printer } from "lucide-react";
+import { FileText, Pill, Clock, CheckCircle2, User, Stethoscope, MapPin, Printer, Search, CheckCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -52,15 +53,39 @@ export default function PrescriptionsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [, navigate] = useLocation();
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("pending");
+  const [patientSearch, setPatientSearch] = useState("");
   const [dispensing, setDispensing] = useState<number | null>(null);
+  const [markingTaken, setMarkingTaken] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const clinic = useClinicSettings();
 
   const { data: prescriptions, isLoading } = useQuery<Prescription[]>({
     queryKey: ["prescriptions", statusFilter],
-    queryFn: () => apiFetch(`/prescriptions${statusFilter !== "all" ? `?status=${statusFilter}` : ""}?limit=50`),
+    queryFn: () => {
+      const params = new URLSearchParams({ limit: "100" });
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      return apiFetch(`/prescriptions?${params}`);
+    },
     refetchInterval: 20000,
+  });
+
+  const markTakenMutation = useMutation({
+    mutationFn: (id: number) =>
+      apiFetch(`/prescriptions/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "dispensed", dispensedAt: new Date().toISOString() }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["prescriptions"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      toast({ title: isRTL ? "تم تحديد الوصفة كمُستلمة" : "Prescription marked as taken" });
+      setMarkingTaken(null);
+    },
+    onError: (e: Error) => {
+      toast({ title: t("error"), description: e.message, variant: "destructive" });
+      setMarkingTaken(null);
+    },
   });
 
   const dispenseMutation = useMutation({
@@ -111,6 +136,11 @@ export default function PrescriptionsPage() {
 
   const pending = prescriptions?.filter((r) => r.status === "pending").length ?? 0;
 
+  const filteredPrescriptions = prescriptions?.filter((rx) => {
+    if (!patientSearch.trim()) return true;
+    return (rx.patientName ?? "").toLowerCase().includes(patientSearch.toLowerCase());
+  });
+
   return (
     <div className="space-y-4">
       <div className={cn("flex items-center justify-between", isRTL && "flex-row-reverse")}>
@@ -135,10 +165,21 @@ export default function PrescriptionsPage() {
         </Select>
       </div>
 
+      {/* Patient search */}
+      <div className="relative">
+        <Search className={cn("absolute top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground", isRTL ? "right-3" : "left-3")} />
+        <Input
+          placeholder={isRTL ? "ابحث بالمريض..." : "Search by patient name..."}
+          value={patientSearch}
+          onChange={(e) => setPatientSearch(e.target.value)}
+          className={cn("h-9 text-sm", isRTL ? "pr-9 text-right" : "pl-9")}
+        />
+      </div>
+
       <div className="space-y-3">
         {isLoading
           ? [1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full" />)
-          : prescriptions?.length === 0
+          : (filteredPrescriptions?.length ?? 0) === 0
           ? (
             <Card className="border-dashed border-border">
               <CardContent className="py-16 text-center">
@@ -147,7 +188,7 @@ export default function PrescriptionsPage() {
               </CardContent>
             </Card>
           )
-          : prescriptions?.map((rx) => {
+          : filteredPrescriptions?.map((rx) => {
               const cfg = STATUS_CONFIG[rx.status] ?? STATUS_CONFIG.pending;
               const isExpanded = expanded.has(rx.id);
               const isPharmacy = role === "pharmacy";
@@ -186,7 +227,24 @@ export default function PrescriptionsPage() {
                       </div>
 
                       <div className={cn("flex items-center gap-2 shrink-0 flex-wrap justify-end", isRTL && "flex-row-reverse")}>
-                        {/* Pharmacy: Issue (dispense) + Print */}
+                        {/* Doctor: Mark as Taken */}
+                        {role === "doctor" && rx.status === "pending" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setMarkingTaken(rx.id);
+                              markTakenMutation.mutate(rx.id);
+                            }}
+                            disabled={markingTaken === rx.id}
+                            className="text-xs gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                          >
+                            <CheckCheck className="w-3.5 h-3.5" />
+                            {markingTaken === rx.id ? "..." : (isRTL ? "تم الاستلام" : "Mark Taken")}
+                          </Button>
+                        )}
+
+                        {/* Pharmacy: Dispense */}
                         {isPharmacy && rx.status === "pending" && (
                           <Button
                             size="sm"

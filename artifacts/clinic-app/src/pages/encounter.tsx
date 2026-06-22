@@ -740,9 +740,10 @@ export default function EncounterPage() {
       <div className="grid lg:grid-cols-3 gap-4">
         {/* ── Left: Form ── */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Patient card */}
-          <Card>
-            <CardContent className="p-4">
+          {/* Patient profile card */}
+          <Card className="border-primary/20 bg-primary/[0.02]">
+            <CardContent className="p-4 space-y-3">
+              {/* Top row: avatar + name + badges */}
               <div className={cn("flex items-start gap-3", isRTL && "flex-row-reverse")}>
                 <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                   <User className="w-6 h-6 text-primary" />
@@ -751,22 +752,52 @@ export default function EncounterPage() {
                   <div className={cn("flex items-center gap-2 flex-wrap", isRTL && "flex-row-reverse")}>
                     <p className="font-bold text-base">{appointment.patientName}</p>
                     {patient?.bloodType && <Badge variant="outline" className="text-xs">{patient.bloodType}</Badge>}
-                    {age != null && <span className="text-xs text-muted-foreground">{age}y · {patient?.gender}</span>}
                     <Badge variant="secondary" className="text-xs capitalize">{appointment.type.replace("_", " ")}</Badge>
                   </div>
-                  {patient?.allergies && patient.allergies !== "None" && (
-                    <div className={cn("flex items-center gap-1 mt-1", isRTL && "flex-row-reverse")}>
-                      <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                      <p className="text-xs text-amber-700 font-medium">
-                        {lang === "ar" ? "تحسس:" : "Allergy:"} {patient.allergies}
-                      </p>
-                    </div>
-                  )}
-                  {patient?.medicalNotes && (
-                    <p className="text-xs text-muted-foreground mt-0.5 truncate">{patient.medicalNotes}</p>
-                  )}
+                  <div className={cn("flex items-center gap-3 mt-0.5 flex-wrap text-xs text-muted-foreground", isRTL && "flex-row-reverse justify-end")}>
+                    {age != null && <span>{age} {lang === "ar" ? "سنة" : "y/o"} · {patient?.gender}</span>}
+                    {patient?.dateOfBirth && (
+                      <span>
+                        {lang === "ar" ? "م:" : "DOB:"} {new Date(patient.dateOfBirth).toLocaleDateString(isRTL ? "ar-AE" : "en-AE", { year: "numeric", month: "short", day: "numeric" })}
+                      </span>
+                    )}
+                    {pastEncounters && pastEncounters.length > 0 && (
+                      <span className="text-primary font-medium">
+                        {lang === "ar" ? "آخر زيارة:" : "Last visit:"} {formatDistanceToNow(new Date(pastEncounters[0].createdAt), { addSuffix: true })}
+                      </span>
+                    )}
+                  </div>
                 </div>
+                <a
+                  href={`/patients`}
+                  className="text-xs text-primary underline-offset-2 hover:underline shrink-0"
+                  onClick={(e) => { e.preventDefault(); navigate("/patients"); }}
+                >
+                  {lang === "ar" ? "السجل الكامل" : "Full history"}
+                </a>
               </div>
+
+              {/* Allergies — prominent warning */}
+              {patient?.allergies && patient.allergies !== "None" && patient.allergies !== "none" && (
+                <div className={cn("flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2", isRTL && "flex-row-reverse")}>
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                  <div className={cn(isRTL && "text-right")}>
+                    <p className="text-xs font-bold text-red-700 uppercase tracking-wide">{lang === "ar" ? "⚠ تحسس / حساسية" : "⚠ ALLERGIES"}</p>
+                    <p className="text-sm text-red-800 mt-0.5">{patient.allergies}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Long-term conditions / chronic medications */}
+              {patient?.medicalNotes && (
+                <div className={cn("flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2", isRTL && "flex-row-reverse")}>
+                  <Pill className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                  <div className={cn(isRTL && "text-right")}>
+                    <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">{lang === "ar" ? "الأمراض المزمنة / أدوية دائمة" : "CHRONIC CONDITIONS / LONG-TERM MEDS"}</p>
+                    <p className="text-sm text-blue-900 mt-0.5">{patient.medicalNotes}</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 

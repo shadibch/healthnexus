@@ -129,8 +129,29 @@ export function AiDiagnosePanel({ chiefComplaint, vitals, patient, onAddOrder }:
     onSuccess: (data) => { setResult(data); setOpen(true); },
   });
 
-  if (!user?.aiAssistantEnabled) return null;
-  if (!chiefComplaint.trim()) return null;
+  if (!user?.aiAssistantEnabled) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 flex items-center gap-2">
+        <Sparkles className="w-4 h-4 text-slate-400 shrink-0" />
+        <p className="text-xs text-slate-500">
+          AI Diagnostic Assistant is available — ask an admin to enable it for your account in{" "}
+          <span className="font-semibold">Admin → Staff</span>.
+        </p>
+      </div>
+    );
+  }
+
+  if (!chiefComplaint.trim()) {
+    return (
+      <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3 flex items-center gap-2">
+        <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+        <p className="text-xs text-amber-700">
+          <span className="font-semibold">AI Diagnostic Assistant</span> — enter the chief complaint above to activate analysis.
+        </p>
+        <Badge className="ml-auto bg-amber-100 text-amber-700 text-[10px] py-0 shrink-0">Beta</Badge>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50/60">
@@ -292,7 +313,18 @@ export function AiPrescriptionPanel({ diagnosis, chiefComplaint, patient, curren
   });
 
   if (!user?.aiAssistantEnabled) return null;
-  if (!diagnosis.trim()) return null;
+
+  if (!diagnosis.trim()) {
+    return (
+      <div className="rounded-xl border border-purple-100 bg-purple-50/40 p-3 flex items-center gap-2">
+        <Pill className="w-4 h-4 text-purple-400 shrink-0" />
+        <p className="text-xs text-purple-700">
+          <span className="font-semibold">AI Prescription Assistant</span> — enter a diagnosis above to get medication suggestions.
+        </p>
+        <Badge className="ml-auto bg-purple-100 text-purple-700 text-[10px] py-0 shrink-0">Beta</Badge>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-purple-200 bg-purple-50/60">

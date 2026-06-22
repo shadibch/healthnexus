@@ -452,7 +452,7 @@ export default function AdminPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="doctor">Doctor</SelectItem>
-                  <SelectItem value="pharmacist">Pharmacist</SelectItem>
+                  <SelectItem value="pharmacy">Pharmacy</SelectItem>
                   <SelectItem value="receptionist">Receptionist</SelectItem>
                 </SelectContent>
               </Select>
