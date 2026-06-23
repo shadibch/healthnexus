@@ -32,6 +32,13 @@ router.get("/patients", requireAuth, async (req, res): Promise<void> => {
   }
   const { search, limit = 50, offset = 0 } = parsed.data;
 
+  // Only allow staff roles to list patients
+  const isStaff = session.roles.some((r) => r !== "patient");
+  if (!isStaff) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
   let patients;
   if (search) {
     patients = await db
@@ -85,13 +92,19 @@ router.get("/patients/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(404).json({ error: "Patient not found" });
     return;
   }
+  // Ensure staff can only access patients within their medical center
+  if (!session.roles.includes("patient") && session.medicalCenterId && patient.medicalCenterId !== session.medicalCenterId) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
   res.json(patient);
 });
 
 router.patch("/patients/:id", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.roles.includes("patient")) {
-    res.status(403).json({ error: "Patients cannot modify records directly" });
+  // Only doctors or admins can modify patient records
+  if (!session.roles.includes("doctor") && !session.roles.includes("admin")) {
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
   const params = UpdatePatientParams.safeParse(req.params);
@@ -104,6 +117,16 @@ router.patch("/patients/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  const [existing] = await db.select().from(patientsTable).where(eq(patientsTable.id, params.data.id));
+  if (!existing) {
+    res.status(404).json({ error: "Patient not found" });
+    return;
+  }
+  if (session.medicalCenterId && existing.medicalCenterId !== session.medicalCenterId) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
   const [patient] = await db
     .update(patientsTable)
     .set(parsed.data)
@@ -118,6 +141,7 @@ router.patch("/patients/:id", requireAuth, async (req, res): Promise<void> => {
 
 router.delete("/patients/:id", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
+  // Only doctors within the same medical center can delete
   if (!session.roles.includes("doctor")) {
     res.status(403).json({ error: "Only doctors can delete patient records" });
     return;
@@ -127,6 +151,16 @@ router.delete("/patients/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
+  const [existing] = await db.select().from(patientsTable).where(eq(patientsTable.id, params.data.id));
+  if (!existing) {
+    res.status(404).json({ error: "Patient not found" });
+    return;
+  }
+  if (session.medicalCenterId && existing.medicalCenterId !== session.medicalCenterId) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
   const [patient] = await db.delete(patientsTable).where(eq(patientsTable.id, params.data.id)).returning();
   if (!patient) {
     res.status(404).json({ error: "Patient not found" });
@@ -153,6 +187,11 @@ router.get("/patients/:id/history", requireAuth, async (req, res): Promise<void>
   const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, patientId));
   if (!patient) {
     res.status(404).json({ error: "Patient not found" });
+    return;
+  }
+  // Enforce same medical center for staff
+  if (!session.roles.includes("patient") && session.medicalCenterId && patient.medicalCenterId !== session.medicalCenterId) {
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
 
