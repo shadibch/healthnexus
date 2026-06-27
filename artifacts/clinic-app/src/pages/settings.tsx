@@ -12,6 +12,7 @@ import {
 } from "@/lib/clinic-settings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +44,8 @@ import {
   Plus,
   Pencil,
   Trash2,
+  MessageSquare,
+  Send,
 } from "lucide-react";
 
 const MAX_BYTES = 1024 * 1024;
@@ -508,15 +511,157 @@ export default function SettingsPage() {
     mutation.mutate(payload);
   };
 
+  // ── Feedback state ───────────────────────────────────────────────────────────
+  const [fbName,    setFbName]    = useState(user?.name  ?? "");
+  const [fbEmail,   setFbEmail]   = useState(user?.email ?? "");
+  const [fbSubject, setFbSubject] = useState("");
+  const [fbMessage, setFbMessage] = useState("");
+  const [fbSending, setFbSending] = useState(false);
+  const [fbSent,    setFbSent]    = useState(false);
+  const [fbError,   setFbError]   = useState("");
+
+  const FEEDBACK_SUBJECTS = [
+    { value: "bug",         en: "Report a Bug / Technical Issue",          ar: "الإبلاغ عن خطأ / مشكلة تقنية" },
+    { value: "improvement", en: "Suggest an Improvement / Feature Request", ar: "اقتراح تحسين / طلب ميزة جديدة" },
+    { value: "question",    en: "General Question / Inquiry",               ar: "سؤال عام / استفسار" },
+    { value: "compliment",  en: "Compliment / Praise",                      ar: "إطراء / مجاملة" },
+  ];
+
+  const handleFeedbackSubmit = async () => {
+    if (!fbName.trim() || !fbEmail.trim() || !fbSubject || !fbMessage.trim()) {
+      setFbError(lang === "ar" ? "يرجى تعبئة جميع الحقول" : "Please fill in all fields.");
+      return;
+    }
+    setFbSending(true);
+    setFbError("");
+    try {
+      const subjectLabel = FEEDBACK_SUBJECTS.find(s => s.value === fbSubject)?.[lang === "ar" ? "ar" : "en"] ?? fbSubject;
+      await apiFetch("/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: fbName.trim(), email: fbEmail.trim(), subject: subjectLabel, message: fbMessage.trim() }),
+      });
+      setFbSent(true);
+      setFbMessage("");
+      setFbSubject("");
+    } catch (err: unknown) {
+      setFbError(err instanceof Error ? err.message : lang === "ar" ? "فشل الإرسال. حاول مجدداً." : "Failed to send. Please try again.");
+    } finally {
+      setFbSending(false);
+    }
+  };
+
+  const FeedbackCard = (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className={cn("text-sm font-semibold flex items-center gap-2", isRTL && "flex-row-reverse")}>
+          <MessageSquare className="w-4 h-4 text-primary" />
+          {lang === "ar" ? "ملاحظات ودعم" : "Feedback & Support"}
+        </CardTitle>
+        <p className="text-xs text-muted-foreground mt-1">
+          {lang === "ar"
+            ? "أرسل ملاحظاتك أو شكاواك وسيصلك تأكيد على بريدك الإلكتروني."
+            : "Send us your feedback or complaints — you'll receive a confirmation email."}
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {fbSent ? (
+          <div className="flex flex-col items-center gap-2 py-6 text-center">
+            <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+            <p className="font-semibold text-sm">
+              {lang === "ar" ? "تم إرسال رسالتك بنجاح!" : "Message sent successfully!"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {lang === "ar" ? "سيصلك تأكيد على بريدك الإلكتروني قريباً." : "A confirmation has been sent to your email."}
+            </p>
+            <Button size="sm" variant="outline" className="mt-2 text-xs" onClick={() => setFbSent(false)}>
+              {lang === "ar" ? "إرسال رسالة أخرى" : "Send another message"}
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className={cn("grid grid-cols-2 gap-3", isRTL && "direction-rtl")}>
+              <div className="space-y-1">
+                <Label className="text-xs">{lang === "ar" ? "الاسم" : "Name"}</Label>
+                <Input
+                  value={fbName}
+                  onChange={e => setFbName(e.target.value)}
+                  placeholder={lang === "ar" ? "الاسم الكامل" : "Full name"}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">{lang === "ar" ? "البريد الإلكتروني" : "Email"}</Label>
+                <Input
+                  type="email"
+                  value={fbEmail}
+                  onChange={e => setFbEmail(e.target.value)}
+                  placeholder="email@example.com"
+                  className="h-8 text-sm"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{lang === "ar" ? "الموضوع" : "Subject"}</Label>
+              <Select value={fbSubject} onValueChange={setFbSubject}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder={lang === "ar" ? "اختر موضوعاً…" : "Choose a subject…"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {FEEDBACK_SUBJECTS.map(s => (
+                    <SelectItem key={s.value} value={s.value} className="text-sm">
+                      {lang === "ar" ? s.ar : s.en}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{lang === "ar" ? "الرسالة" : "Message"}</Label>
+              <Textarea
+                value={fbMessage}
+                onChange={e => setFbMessage(e.target.value)}
+                placeholder={lang === "ar" ? "اكتب رسالتك هنا…" : "Write your message here…"}
+                rows={4}
+                className="text-sm resize-none"
+              />
+            </div>
+            {fbError && (
+              <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/10 px-3 py-2 rounded-lg">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                {fbError}
+              </div>
+            )}
+            <div className={cn("flex", isRTL ? "justify-start" : "justify-end")}>
+              <Button size="sm" onClick={handleFeedbackSubmit} disabled={fbSending} className="gap-2">
+                {fbSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                {fbSending
+                  ? (lang === "ar" ? "جارٍ الإرسال…" : "Sending…")
+                  : (lang === "ar" ? "إرسال" : "Send Message")}
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
   if (!isAdmin) {
     return (
-      <div className="text-center py-16">
-        <AlertCircle className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-        <p className="text-muted-foreground text-sm">
-          {lang === "ar"
-            ? "هذه الصفحة للأطباء والمستقبلين فقط"
-            : "This page is only available to doctors and receptionists"}
-        </p>
+      <div className={cn("space-y-5 max-w-2xl", isRTL && "font-arabic")} dir={isRTL ? "rtl" : "ltr"}>
+        <Toaster />
+        <div className={cn(isRTL && "text-right")}>
+          <h1 className="text-xl font-bold flex items-center gap-2">
+            <MessageSquare className="w-5 h-5 text-primary" />
+            {lang === "ar" ? "ملاحظات ودعم" : "Feedback & Support"}
+          </h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {lang === "ar"
+              ? "شاركنا ملاحظاتك أو تساؤلاتك وسنرد عليك في أقرب وقت"
+              : "Share your thoughts or questions and we'll get back to you soon"}
+          </p>
+        </div>
+        {FeedbackCard}
       </div>
     );
   }
@@ -891,6 +1036,9 @@ export default function SettingsPage() {
 
       {/* Fee Schedule */}
       <FeeScheduleCard lang={lang} isRTL={isRTL} />
+
+      {/* Feedback */}
+      {FeedbackCard}
 
       {/* Action bar */}
       <div className="sticky bottom-0 bg-background/80 backdrop-blur-sm py-4 border-t border-border flex justify-end">

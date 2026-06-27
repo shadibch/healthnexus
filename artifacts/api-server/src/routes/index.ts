@@ -21,6 +21,7 @@ import usersRouter from "./users";
 import aiAssistantRouter from "./ai-assistant";
 import backupsRouter from "./backups";
 import remindersRouter from "./reminders";
+import feedbackRouter from "./feedback";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(settingsRouter);
 router.use(aiAssistantRouter);
 router.use(backupsRouter);
 router.use(remindersRouter);
+router.use(feedbackRouter);
 
 export default router;

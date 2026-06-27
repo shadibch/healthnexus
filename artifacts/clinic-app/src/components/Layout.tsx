@@ -144,10 +144,8 @@ function buildNav(
     add({ href: "/reminders", label: lang === "ar" ? "التذكيرات" : "Reminders", icon: Bell, badge: 0, badgeVariant: "red" });
   }
 
-  // ── Settings (staff only) ──────────────────────────────────────────────────
-  if (has("admin", "doctor", "receptionist", "pharmacist", "pharmacy")) {
-    add({ href: "/settings", label: lang === "ar" ? "الإعدادات" : "Settings", icon: Settings, badge: 0, badgeVariant: "red" });
-  }
+  // ── Settings / Feedback (all roles) ────────────────────────────────────────
+  add({ href: "/settings", label: lang === "ar" ? "الإعدادات والدعم" : "Settings & Support", icon: Settings, badge: 0, badgeVariant: "red" });
 
   return items;
 }
