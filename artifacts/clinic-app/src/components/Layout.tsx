@@ -29,6 +29,7 @@ import {
   Pencil,
   Check,
   X,
+  FileSearch,
 } from "lucide-react";
 import { useClinicSettings } from "@/lib/clinic-settings";
 import { Button } from "@/components/ui/button";
@@ -114,7 +115,8 @@ function buildNav(
 
   // ── Doctor-specific ────────────────────────────────────────────────────────
   if (has("doctor")) {
-    add({ href: "/consultations", label: t("consultations"),                                    icon: Stethoscope, badge: 0,                    badgeVariant: "red"   });
+    add({ href: "/consultations",    label: t("consultations"),                                        icon: Stethoscope,  badge: 0,                    badgeVariant: "red"   });
+    add({ href: "/search-encounters", label: lang === "ar" ? "بحث في السجلات" : "Search Encounters",  icon: FileSearch,   badge: 0,                    badgeVariant: "red"   });
     add({ href: "/prescriptions", label: t("prescriptions"),                                    icon: FileText,    badge: badges.prescriptions, badgeVariant: "amber" });
     add({ href: "/medications",   label: t("medications"),                                      icon: FlaskConical, badge: 0,                   badgeVariant: "red"   });
     add({ href: "/billing",       label: t("billing"),                                          icon: ShieldCheck, badge: 0,                    badgeVariant: "red"   });

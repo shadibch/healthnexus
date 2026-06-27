@@ -603,7 +603,7 @@ export default function AdminPage() {
                               "w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0",
                               s.deactivated ? "bg-red-100 text-red-500" : "bg-primary/10 text-primary"
                             )}>
-                              {(s.name ?? s.email ?? "?")[0].toUpperCase()}
+                              {(s.name || s.email || "?")[0].toUpperCase()}
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">

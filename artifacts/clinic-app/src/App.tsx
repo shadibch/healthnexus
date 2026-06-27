@@ -26,6 +26,7 @@ import MapPage from "@/pages/map";
 import ReportsPage from "@/pages/reports";
 import SettingsPage from "@/pages/settings";
 import RemindersPage from "@/pages/reminders";
+import SearchEncountersPage from "@/pages/search-encounters";
 import AdminPage from "@/pages/admin";
 import ChangePasswordPage from "@/pages/change-password";
 import NotFound from "@/pages/not-found";
@@ -219,6 +220,7 @@ function AppRoutes() {
           <Route path="/reports" component={ReportsPage} />
           <Route path="/settings" component={SettingsPage} />
           <Route path="/reminders" component={RemindersPage} />
+          <Route path="/search-encounters" component={SearchEncountersPage} />
           <Route path="/admin" component={AdminPage} />
           <Route component={NotFound} />
         </Switch>
