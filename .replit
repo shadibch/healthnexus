@@ -40,3 +40,12 @@ channel = "stable-25_05"
 
 [objectStorage]
 defaultBucketID = "replit-objstore-51c63d54-1858-44e8-8d3c-b4ecd5e421a5"
+
+[userenv]
+
+[userenv.shared]
+SMTP_HOST = "smtp.hostinger.com"
+SMTP_PORT = "false"
+SMTP_USER = "info@camsclinic.org"
+SMTP_PASS = "***REMOVED***"
+SMTP_FROM = "info@camsclinic.org"
