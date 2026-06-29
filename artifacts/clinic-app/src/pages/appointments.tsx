@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -36,7 +36,7 @@ import {
 import {
   CalendarClock, User, Stethoscope, Clock, Plus, ChevronRight,
   ChevronLeft, CheckCircle2, XCircle, RefreshCw, Loader2,
-  CalendarDays, Info, Star,
+  CalendarDays, Info, Star, Search, X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -67,6 +67,15 @@ interface Slot {
   available: boolean;
   booked: boolean;
   past: boolean;
+}
+
+interface PatientRecord {
+  id: number;
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+  gender: string | null;
+  dateOfBirth: string | null;
 }
 
 interface SlotsResponse {
@@ -537,6 +546,495 @@ function SlotPicker({ slots, loading, selected, onSelect, isRTL, lang }: {
   );
 }
 
+// ─── Doctor Schedule Dialog ───────────────────────────────────────────────────
+function DoctorScheduleDialog({
+  open,
+  onClose,
+  rescheduleTarget,
+  doctorDbId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  rescheduleTarget?: Appointment;
+  doctorDbId: number;
+}) {
+  const { lang, isRTL } = useI18n();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const ar = lang === "ar";
+  const isReschedule = !!rescheduleTarget;
+
+  const [step, setStep] = useState(1);
+  const [patientTab, setPatientTab] = useState<"existing" | "new">("existing");
+  const [patientSearch, setPatientSearch] = useState("");
+  const [selectedPatient, setSelectedPatient] = useState<PatientRecord | null>(null);
+  const [newFirst, setNewFirst] = useState("");
+  const [newLast, setNewLast] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [newGender, setNewGender] = useState("");
+  const [selectedDate, setSelectedDate] = useState(todayISO());
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [apptType, setApptType] = useState("routine");
+  const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setStep(1);
+      setPatientTab("existing");
+      setPatientSearch("");
+      setSelectedPatient(null);
+      setNewFirst(""); setNewLast(""); setNewPhone(""); setNewGender("");
+      setSelectedDate(todayISO());
+      setSelectedSlot(null);
+      setApptType("routine");
+      setNotes("");
+    }
+  }, [open]);
+
+  const { data: patients = [], isLoading: loadingPatients } = useQuery<PatientRecord[]>({
+    queryKey: ["patients-all"],
+    queryFn: () => apiFetch("/patients?limit=500"),
+    enabled: open && !isReschedule,
+  });
+
+  const { data: slotsData, isLoading: loadingSlots } = useQuery<SlotsResponse>({
+    queryKey: ["slots-doctor", doctorDbId, selectedDate],
+    queryFn: () => apiFetch(`/appointments/slots?doctorId=${doctorDbId}&date=${selectedDate}`),
+    enabled: !!doctorDbId && !!selectedDate && open && (isReschedule || step >= 2),
+  });
+
+  const filteredPatients = patients
+    .filter((p) => {
+      if (!patientSearch.trim()) return true;
+      const q = patientSearch.toLowerCase();
+      return `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) || (p.phone ?? "").includes(q);
+    })
+    .slice(0, patientSearch.trim() ? 50 : 20);
+
+  const createPatientMutation = useMutation({
+    mutationFn: () =>
+      apiFetch<PatientRecord>("/patients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: newFirst.trim(),
+          lastName: newLast.trim(),
+          phone: newPhone.trim() || undefined,
+          gender: newGender || undefined,
+        }),
+      }),
+    onSuccess: (patient) => {
+      setSelectedPatient(patient);
+      qc.invalidateQueries({ queryKey: ["patients-all"] });
+      setStep(2);
+    },
+    onError: (e: Error) =>
+      toast({ title: ar ? "خطأ" : "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const scheduleMutation = useMutation({
+    mutationFn: () => {
+      const [h, m] = selectedSlot!.split(":").map(Number);
+      const dt = new Date(selectedDate);
+      dt.setHours(h, m, 0, 0);
+      return apiFetch("/appointments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientId: selectedPatient!.id,
+          doctorId: doctorDbId,
+          scheduledAt: dt.toISOString(),
+          type: apptType,
+          status: "scheduled",
+          notes: notes || undefined,
+        }),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+      qc.invalidateQueries({ queryKey: ["queue"] });
+      toast({ title: ar ? "تم جدولة الموعد بنجاح" : "Appointment scheduled successfully" });
+      onClose();
+    },
+    onError: (e: Error) =>
+      toast({ title: ar ? "خطأ" : "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const rescheduleMutation = useMutation({
+    mutationFn: () => {
+      const [h, m] = selectedSlot!.split(":").map(Number);
+      const dt = new Date(selectedDate);
+      dt.setHours(h, m, 0, 0);
+      return apiFetch(`/appointments/${rescheduleTarget!.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledAt: dt.toISOString() }),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+      qc.invalidateQueries({ queryKey: ["queue"] });
+      toast({ title: ar ? "تم إعادة الجدولة بنجاح" : "Appointment rescheduled" });
+      onClose();
+    },
+    onError: (e: Error) =>
+      toast({ title: ar ? "خطأ" : "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const TYPE_LABELS_D: Record<string, { en: string; ar: string }> = {
+    routine:      { en: "Routine Checkup",    ar: "فحص روتيني" },
+    follow_up:    { en: "Follow-up Visit",    ar: "زيارة متابعة" },
+    consultation: { en: "Consultation",       ar: "استشارة" },
+    emergency:    { en: "Urgent / Emergency", ar: "عاجل / طارئ" },
+  };
+
+  const totalSteps = isReschedule ? 1 : 3;
+  const showDateSlot = (!isReschedule && step === 2) || (isReschedule && step === 1);
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className={cn(isRTL && "text-right")}>
+            {isReschedule
+              ? (ar ? "إعادة جدولة الموعد" : "Reschedule Appointment")
+              : (ar ? "جدولة موعد جديد" : "Schedule New Appointment")}
+          </DialogTitle>
+        </DialogHeader>
+
+        {totalSteps > 1 && <Steps step={step} total={totalSteps} isRTL={isRTL} />}
+
+        {/* ── Step 1 (schedule): Select Patient ─────────────────────────────── */}
+        {!isReschedule && step === 1 && (
+          <div className="space-y-3">
+            {/* Tabs */}
+            <div className="flex rounded-lg border border-border overflow-hidden">
+              <button
+                onClick={() => setPatientTab("existing")}
+                className={cn(
+                  "flex-1 py-2 text-sm font-medium transition-colors",
+                  patientTab === "existing"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted/50 text-muted-foreground"
+                )}
+              >
+                {ar ? "مريض موجود" : "Existing Patient"}
+              </button>
+              <button
+                onClick={() => setPatientTab("new")}
+                className={cn(
+                  "flex-1 py-2 text-sm font-medium transition-colors border-l border-border",
+                  patientTab === "new"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted/50 text-muted-foreground"
+                )}
+              >
+                {ar ? "مريض جديد" : "New Patient"}
+              </button>
+            </div>
+
+            {/* Existing patient search */}
+            {patientTab === "existing" && (
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search
+                    className={cn(
+                      "absolute top-2.5 w-4 h-4 text-muted-foreground",
+                      isRTL ? "right-3" : "left-3"
+                    )}
+                  />
+                  <input
+                    autoFocus
+                    value={patientSearch}
+                    onChange={(e) => setPatientSearch(e.target.value)}
+                    placeholder={ar ? "ابحث بالاسم أو رقم الهاتف…" : "Search by name or phone…"}
+                    className={cn(
+                      "w-full border border-border rounded-md py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary",
+                      isRTL ? "pr-9 pl-3 text-right" : "pl-9 pr-3"
+                    )}
+                  />
+                </div>
+                <div className="max-h-64 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+                  {loadingPatients
+                    ? [1, 2, 3].map((i) => (
+                        <div key={i} className="px-3 py-2.5">
+                          <Skeleton className="h-4 w-32 mb-1" />
+                          <Skeleton className="h-3 w-20" />
+                        </div>
+                      ))
+                    : filteredPatients.length === 0
+                      ? (
+                        <p className="text-xs text-muted-foreground text-center py-8">
+                          {ar ? "لا توجد نتائج" : "No patients found"}
+                        </p>
+                      )
+                      : filteredPatients.map((p) => {
+                          const age = p.dateOfBirth
+                            ? Math.floor((Date.now() - new Date(p.dateOfBirth).getTime()) / (365.25 * 24 * 3600 * 1000))
+                            : null;
+                          return (
+                            <button
+                              key={p.id}
+                              onClick={() => { setSelectedPatient(p); setStep(2); }}
+                              className={cn(
+                                "w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors",
+                                isRTL ? "flex-row-reverse text-right" : "text-left"
+                              )}
+                            >
+                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary font-bold text-xs">
+                                {(p.firstName[0] ?? "?").toUpperCase()}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">
+                                  {p.firstName} {p.lastName}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {[age != null ? `${age}y` : null, p.gender, p.phone]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </p>
+                              </div>
+                              <ChevronRight
+                                className={cn("w-4 h-4 text-muted-foreground shrink-0", isRTL && "rotate-180")}
+                              />
+                            </button>
+                          );
+                        })}
+                </div>
+                {!patientSearch.trim() && patients.length > 20 && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    {ar
+                      ? `يعرض أحدث 20 مريض من ${patients.length}. ابحث للعثور على المزيد.`
+                      : `Showing 20 of ${patients.length}. Search to find more.`}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* New patient quick-register */}
+            {patientTab === "new" && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">
+                      {ar ? "الاسم الأول *" : "First Name *"}
+                    </label>
+                    <input
+                      value={newFirst}
+                      onChange={(e) => setNewFirst(e.target.value)}
+                      placeholder={ar ? "الاسم" : "First"}
+                      className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">
+                      {ar ? "الاسم الأخير *" : "Last Name *"}
+                    </label>
+                    <input
+                      value={newLast}
+                      onChange={(e) => setNewLast(e.target.value)}
+                      placeholder={ar ? "الاسم الأخير" : "Last"}
+                      className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">{ar ? "الهاتف" : "Phone"}</label>
+                    <input
+                      value={newPhone}
+                      onChange={(e) => setNewPhone(e.target.value)}
+                      placeholder="+971 50 000 0000"
+                      dir="ltr"
+                      className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">{ar ? "الجنس" : "Gender"}</label>
+                    <Select value={newGender} onValueChange={setNewGender}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="—" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">{ar ? "ذكر" : "Male"}</SelectItem>
+                        <SelectItem value="female">{ar ? "أنثى" : "Female"}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <Button
+                  className="w-full gap-2"
+                  disabled={!newFirst.trim() || !newLast.trim() || createPatientMutation.isPending}
+                  onClick={() => createPatientMutation.mutate()}
+                >
+                  {createPatientMutation.isPending
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <Plus className="w-4 h-4" />}
+                  {ar ? "تسجيل والمتابعة" : "Register & Continue"}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Step 2 (schedule) / Step 1 (reschedule): Date + Slot ─────────── */}
+        {showDateSlot && (
+          <div className="space-y-4">
+            {/* Patient chip (schedule mode) */}
+            {!isReschedule && selectedPatient && (
+              <div className={cn("flex items-center gap-2 p-2.5 bg-muted/40 rounded-lg text-sm", isRTL && "flex-row-reverse")}>
+                <User className="w-4 h-4 text-primary shrink-0" />
+                <span className="font-medium flex-1">
+                  {selectedPatient.firstName} {selectedPatient.lastName}
+                </span>
+                <button
+                  onClick={() => { setSelectedPatient(null); setStep(1); }}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+            {/* Current appointment (reschedule mode) */}
+            {isReschedule && rescheduleTarget && (
+              <div className={cn("p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm space-y-1", isRTL && "text-right")}>
+                <p className="font-medium text-amber-800">{ar ? "الموعد الحالي" : "Current Appointment"}</p>
+                <p className="text-amber-700">
+                  {rescheduleTarget.patientName} ·{" "}
+                  {new Date(rescheduleTarget.scheduledAt).toLocaleString(
+                    ar ? "ar-AE" : "en-AE",
+                    { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
+                  )}
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <Label className={cn(isRTL && "block text-right")}>{ar ? "التاريخ" : "Date"}</Label>
+              <input
+                type="date"
+                value={selectedDate}
+                min={minDateISO()}
+                max={maxDateISO()}
+                onChange={(e) => { setSelectedDate(e.target.value); setSelectedSlot(null); }}
+                className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            <SlotPicker
+              slots={slotsData?.slots ?? []}
+              loading={loadingSlots}
+              selected={selectedSlot}
+              onSelect={setSelectedSlot}
+              isRTL={isRTL}
+              lang={lang}
+            />
+
+            <div className={cn("flex gap-2 pt-2", isRTL && "flex-row-reverse")}>
+              {!isReschedule && (
+                <Button variant="outline" onClick={() => setStep(1)} className="gap-1">
+                  <ChevronLeft className={cn("w-4 h-4", isRTL && "rotate-180")} />
+                  {ar ? "رجوع" : "Back"}
+                </Button>
+              )}
+              {isReschedule ? (
+                <Button
+                  className="flex-1 bg-amber-600 hover:bg-amber-700 gap-1"
+                  disabled={!selectedSlot || rescheduleMutation.isPending}
+                  onClick={() => rescheduleMutation.mutate()}
+                >
+                  {rescheduleMutation.isPending
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <RefreshCw className="w-4 h-4" />}
+                  {ar ? "تأكيد إعادة الجدولة" : "Confirm Reschedule"}
+                </Button>
+              ) : (
+                <Button
+                  className="flex-1"
+                  disabled={!selectedSlot}
+                  onClick={() => setStep(3)}
+                >
+                  {ar ? "التالي" : "Next"}
+                  <ChevronRight className={cn("w-4 h-4 ml-1", isRTL && "rotate-180")} />
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 3 (schedule): Type + Notes + Confirm ─────────────────────── */}
+        {!isReschedule && step === 3 && (
+          <div className="space-y-4">
+            <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg space-y-1.5 text-sm">
+              <div className={cn("flex items-center gap-2", isRTL && "flex-row-reverse")}>
+                <User className="w-3.5 h-3.5 text-primary" />
+                <span>{selectedPatient?.firstName} {selectedPatient?.lastName}</span>
+              </div>
+              <div className={cn("flex items-center gap-2", isRTL && "flex-row-reverse")}>
+                <CalendarDays className="w-3.5 h-3.5 text-primary" />
+                <span>
+                  {new Date(selectedDate).toLocaleDateString(ar ? "ar-AE" : "en-AE", {
+                    weekday: "long", year: "numeric", month: "long", day: "numeric",
+                  })}
+                </span>
+              </div>
+              <div className={cn("flex items-center gap-2", isRTL && "flex-row-reverse")}>
+                <Clock className="w-3.5 h-3.5 text-primary" />
+                <span>{selectedSlot}</span>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className={cn(isRTL && "block text-right")}>{ar ? "نوع الموعد" : "Appointment Type"}</Label>
+              <Select value={apptType} onValueChange={setApptType}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {APPOINTMENT_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {ar ? TYPE_LABELS_D[t].ar : TYPE_LABELS_D[t].en}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className={cn(isRTL && "block text-right")}>
+                {ar ? "ملاحظات (اختياري)" : "Notes (optional)"}
+              </Label>
+              <Textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={ar ? "ملاحظات أو تعليمات خاصة…" : "Notes or special instructions…"}
+                className={cn("resize-none", isRTL && "text-right")}
+                rows={3}
+                dir={isRTL ? "rtl" : "ltr"}
+              />
+            </div>
+
+            <div className={cn("flex gap-2", isRTL && "flex-row-reverse")}>
+              <Button variant="outline" onClick={() => setStep(2)} className="gap-1">
+                <ChevronLeft className={cn("w-4 h-4", isRTL && "rotate-180")} />
+                {ar ? "رجوع" : "Back"}
+              </Button>
+              <Button
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 gap-1"
+                onClick={() => scheduleMutation.mutate()}
+                disabled={scheduleMutation.isPending}
+              >
+                {scheduleMutation.isPending
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <CheckCircle2 className="w-4 h-4" />}
+                {ar ? "تأكيد الجدولة" : "Confirm Appointment"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function AppointmentsPage() {
   const { user } = useAuth();
@@ -545,11 +1043,14 @@ export default function AppointmentsPage() {
   const qc = useQueryClient();
   const { hasRole } = useRole();
   const isPatient = hasRole("patient");
+  const isStaff = hasRole("doctor") || hasRole("receptionist");
 
   const [bookOpen, setBookOpen] = useState(false);
   const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [staffRescheduleTarget, setStaffRescheduleTarget] = useState<Appointment | null>(null);
 
   const STATUS_COLORS: Record<string, string> = {
     scheduled:   "bg-blue-100 text-blue-800",
@@ -592,6 +1093,22 @@ export default function AppointmentsPage() {
     onError: (e: Error) => toast({ title: lang === "ar" ? "خطأ" : "Error", description: e.message, variant: "destructive" }),
   });
 
+  const staffCancelMutation = useMutation({
+    mutationFn: (id: number) =>
+      apiFetch(`/appointments/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "cancelled" }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+      qc.invalidateQueries({ queryKey: ["queue"] });
+      toast({ title: lang === "ar" ? "تم إلغاء الموعد" : "Appointment cancelled" });
+      setCancelTarget(null);
+    },
+    onError: (e: Error) => toast({ title: lang === "ar" ? "خطأ" : "Error", description: e.message, variant: "destructive" }),
+  });
+
   const filteredAppointments = useMemo(() => {
     const sorted = [...appointments].sort(
       (a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime()
@@ -607,6 +1124,10 @@ export default function AppointmentsPage() {
     isPatient && ["scheduled", "confirmed"].includes(a.status) && new Date(a.scheduledAt) > new Date();
   const canReschedule = (a: Appointment) =>
     isPatient && ["scheduled", "confirmed"].includes(a.status) && new Date(a.scheduledAt) > new Date();
+  const canStaffReschedule = (a: Appointment) =>
+    isStaff && !["completed", "cancelled", "no_show", "in_progress"].includes(a.status);
+  const canStaffCancel = (a: Appointment) =>
+    isStaff && !["completed", "cancelled", "no_show"].includes(a.status);
 
   const FILTER_OPTIONS = [
     { value: "all", en: "All", ar: "الكل" },
@@ -621,7 +1142,11 @@ export default function AppointmentsPage() {
       {/* Header */}
       <div className={cn("flex items-start justify-between gap-3", isRTL && "flex-row-reverse")}>
         <div className={cn(isRTL && "text-right")}>
-          <h1 className="text-2xl font-bold">{lang === "ar" ? "مواعيدي" : "My Appointments"}</h1>
+          <h1 className="text-2xl font-bold">
+            {isStaff
+              ? (lang === "ar" ? "المواعيد" : "Appointments")
+              : (lang === "ar" ? "مواعيدي" : "My Appointments")}
+          </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {appointments.length} {lang === "ar" ? "موعد" : "appointments"}
             {upcoming.length > 0 && (
@@ -635,6 +1160,12 @@ export default function AppointmentsPage() {
           <Button onClick={() => setBookOpen(true)} className="gap-2 shrink-0">
             <Plus className="w-4 h-4" />
             {lang === "ar" ? "حجز موعد" : "Book Appointment"}
+          </Button>
+        )}
+        {isStaff && (
+          <Button onClick={() => setScheduleOpen(true)} className="gap-2 shrink-0">
+            <Plus className="w-4 h-4" />
+            {lang === "ar" ? "جدولة موعد" : "Schedule Appointment"}
           </Button>
         )}
       </div>
@@ -736,6 +1267,12 @@ export default function AppointmentsPage() {
                         </div>
 
                         <div className={cn("flex items-center gap-3 mt-1.5 flex-wrap text-xs text-muted-foreground", isRTL && "flex-row-reverse")}>
+                          {isStaff && a.patientName && (
+                            <span className="flex items-center gap-1 font-medium text-foreground">
+                              <User className="w-3 h-3" />
+                              {a.patientName}
+                            </span>
+                          )}
                           {a.doctorName && (
                             <span className="flex items-center gap-1">
                               <Stethoscope className="w-3 h-3" />
@@ -762,7 +1299,7 @@ export default function AppointmentsPage() {
                         )}
                       </div>
 
-                      {/* Actions */}
+                      {/* Actions — patient */}
                       {isPatient && (canCancel(a) || canReschedule(a)) && (
                         <div className={cn("flex flex-col gap-1.5 shrink-0", isRTL && "items-start")}>
                           {canReschedule(a) && (
@@ -777,6 +1314,33 @@ export default function AppointmentsPage() {
                             </Button>
                           )}
                           {canCancel(a) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-7 gap-1 border-red-200 text-red-600 hover:bg-red-50"
+                              onClick={() => setCancelTarget(a)}
+                            >
+                              <XCircle className="w-3 h-3" />
+                              {lang === "ar" ? "إلغاء" : "Cancel"}
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                      {/* Actions — staff (doctor / receptionist) */}
+                      {isStaff && (canStaffReschedule(a) || canStaffCancel(a)) && (
+                        <div className={cn("flex flex-col gap-1.5 shrink-0", isRTL && "items-start")}>
+                          {canStaffReschedule(a) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-7 gap-1 border-amber-300 text-amber-700 hover:bg-amber-50"
+                              onClick={() => setStaffRescheduleTarget(a)}
+                            >
+                              <RefreshCw className="w-3 h-3" />
+                              {lang === "ar" ? "إعادة جدولة" : "Reschedule"}
+                            </Button>
+                          )}
+                          {canStaffCancel(a) && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -832,16 +1396,39 @@ export default function AppointmentsPage() {
             <AlertDialogCancel>{lang === "ar" ? "رجوع" : "Go Back"}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700"
-              onClick={() => cancelTarget && cancelMutation.mutate(cancelTarget.id)}
-              disabled={cancelMutation.isPending}
+              onClick={() => {
+                if (!cancelTarget) return;
+                if (isPatient) cancelMutation.mutate(cancelTarget.id);
+                else staffCancelMutation.mutate(cancelTarget.id);
+              }}
+              disabled={cancelMutation.isPending || staffCancelMutation.isPending}
             >
-              {cancelMutation.isPending
+              {(cancelMutation.isPending || staffCancelMutation.isPending)
                 ? <Loader2 className="w-4 h-4 animate-spin" />
                 : (lang === "ar" ? "إلغاء الموعد" : "Yes, Cancel It")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Doctor schedule dialog (new appointment) */}
+      {isStaff && user?.doctorDbId && (
+        <DoctorScheduleDialog
+          open={scheduleOpen}
+          onClose={() => setScheduleOpen(false)}
+          doctorDbId={user.doctorDbId}
+        />
+      )}
+
+      {/* Doctor reschedule dialog */}
+      {isStaff && user?.doctorDbId && staffRescheduleTarget && (
+        <DoctorScheduleDialog
+          open={!!staffRescheduleTarget}
+          onClose={() => setStaffRescheduleTarget(null)}
+          rescheduleTarget={staffRescheduleTarget}
+          doctorDbId={user.doctorDbId}
+        />
+      )}
     </div>
   );
 }
