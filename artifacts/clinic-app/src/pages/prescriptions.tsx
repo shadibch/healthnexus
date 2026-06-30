@@ -2,15 +2,24 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { useRole } from "@/lib/role";
 import { useI18n } from "@/lib/i18n";
 import { useClinicSettings } from "@/lib/clinic-settings";
 import { printPrescription } from "@/lib/print-prescription";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -18,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Pill, Clock, CheckCircle2, User, Stethoscope, MapPin, Printer, Search, CheckCheck } from "lucide-react";
+import { FileText, Pill, Clock, CheckCircle2, User, Stethoscope, MapPin, Printer, Search, CheckCheck, MessageSquare, Send, AlertCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -47,11 +56,19 @@ interface Prescription {
   items: PrescriptionItem[];
 }
 
+const FEEDBACK_SUBJECTS = [
+  { value: "bug",         en: "Report a Bug / Technical Issue",          ar: "الإبلاغ عن خطأ / مشكلة تقنية" },
+  { value: "improvement", en: "Suggest an Improvement / Feature Request", ar: "اقتراح تحسين / طلب ميزة جديدة" },
+  { value: "question",    en: "General Question / Inquiry",               ar: "سؤال عام / استفسار" },
+  { value: "compliment",  en: "Compliment / Praise",                      ar: "إطراء / مجاملة" },
+];
+
 export default function PrescriptionsPage() {
   const { role } = useRole();
-  const { t, isRTL } = useI18n();
+  const { t, isRTL, lang } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [, navigate] = useLocation();
   const [statusFilter, setStatusFilter] = useState<string>("pending");
   const [patientSearch, setPatientSearch] = useState("");
@@ -59,6 +76,42 @@ export default function PrescriptionsPage() {
   const [markingTaken, setMarkingTaken] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const clinic = useClinicSettings();
+
+  // ── Feedback dialog state ─────────────────────────────────────────────────
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [fbName,    setFbName]    = useState(user?.name  ?? "");
+  const [fbEmail,   setFbEmail]   = useState(user?.email ?? "");
+  const [fbSubject, setFbSubject] = useState("");
+  const [fbMessage, setFbMessage] = useState("");
+  const [fbSending, setFbSending] = useState(false);
+  const [fbSent,    setFbSent]    = useState(false);
+  const [fbError,   setFbError]   = useState("");
+
+  const ar = lang === "ar";
+
+  const handleFeedbackSubmit = async () => {
+    if (!fbName.trim() || !fbEmail.trim() || !fbSubject || !fbMessage.trim()) {
+      setFbError(ar ? "يرجى تعبئة جميع الحقول" : "Please fill in all fields.");
+      return;
+    }
+    setFbSending(true);
+    setFbError("");
+    try {
+      const subjectLabel = FEEDBACK_SUBJECTS.find(s => s.value === fbSubject)?.[ar ? "ar" : "en"] ?? fbSubject;
+      await apiFetch("/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: fbName.trim(), email: fbEmail.trim(), subject: subjectLabel, message: fbMessage.trim() }),
+      });
+      setFbSent(true);
+      setFbMessage("");
+      setFbSubject("");
+    } catch (err: unknown) {
+      setFbError(err instanceof Error ? err.message : ar ? "فشل الإرسال. حاول مجدداً." : "Failed to send. Please try again.");
+    } finally {
+      setFbSending(false);
+    }
+  };
 
   const { data: prescriptions, isLoading } = useQuery<Prescription[]>({
     queryKey: ["prescriptions", statusFilter],
@@ -143,7 +196,7 @@ export default function PrescriptionsPage() {
 
   return (
     <div className="space-y-4">
-      <div className={cn("flex items-center justify-between", isRTL && "flex-row-reverse")}>
+      <div className={cn("flex items-center justify-between gap-3", isRTL && "flex-row-reverse")}>
         <div className={cn(isRTL && "text-right")}>
           <h1 className="text-2xl font-bold">
             {role === "pharmacy" ? t("pendingRx") : t("prescriptions")}
@@ -152,17 +205,28 @@ export default function PrescriptionsPage() {
             {pending > 0 ? `${pending} ${t("pendingDispensing")}` : t("allPrescriptions")}
           </p>
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("all")}</SelectItem>
-            <SelectItem value="pending">{t("pending")}</SelectItem>
-            <SelectItem value="dispensed">{t("dispensed")}</SelectItem>
-            <SelectItem value="cancelled">{t("cancelled")}</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className={cn("flex items-center gap-2 shrink-0", isRTL && "flex-row-reverse")}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 text-xs text-muted-foreground"
+            onClick={() => { setFbSent(false); setFbError(""); setFeedbackOpen(true); }}
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            {ar ? "ملاحظات" : "Feedback"}
+          </Button>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("all")}</SelectItem>
+              <SelectItem value="pending">{t("pending")}</SelectItem>
+              <SelectItem value="dispensed">{t("dispensed")}</SelectItem>
+              <SelectItem value="cancelled">{t("cancelled")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Patient search */}
@@ -338,6 +402,98 @@ export default function PrescriptionsPage() {
               );
             })}
       </div>
+
+      {/* ── Feedback Dialog ──────────────────────────────────────────────────── */}
+      <Dialog open={feedbackOpen} onOpenChange={(v) => { if (!v) setFeedbackOpen(false); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className={cn("flex items-center gap-2 text-base", isRTL && "flex-row-reverse")}>
+              <MessageSquare className="w-4 h-4 text-primary shrink-0" />
+              {ar ? "ملاحظات ودعم" : "Feedback & Support"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {fbSent ? (
+            <div className="flex flex-col items-center gap-2 py-8 text-center">
+              <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+              <p className="font-semibold text-sm">
+                {ar ? "تم إرسال رسالتك بنجاح!" : "Message sent successfully!"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {ar ? "سيصلك تأكيد على بريدك الإلكتروني قريباً." : "A confirmation has been sent to your email."}
+              </p>
+              <Button size="sm" variant="outline" className="mt-2 text-xs" onClick={() => setFbSent(false)}>
+                {ar ? "إرسال رسالة أخرى" : "Send another message"}
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3 pt-1">
+              <div className={cn("grid grid-cols-2 gap-3", isRTL && "direction-rtl")}>
+                <div className="space-y-1">
+                  <Label className="text-xs">{ar ? "الاسم" : "Name"}</Label>
+                  <Input
+                    value={fbName}
+                    onChange={e => setFbName(e.target.value)}
+                    placeholder={ar ? "الاسم الكامل" : "Full name"}
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">{ar ? "البريد الإلكتروني" : "Email"}</Label>
+                  <Input
+                    type="email"
+                    value={fbEmail}
+                    onChange={e => setFbEmail(e.target.value)}
+                    placeholder="email@example.com"
+                    className="h-8 text-sm"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">{ar ? "الموضوع" : "Subject"}</Label>
+                <Select value={fbSubject} onValueChange={setFbSubject}>
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue placeholder={ar ? "اختر موضوعاً…" : "Choose a subject…"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FEEDBACK_SUBJECTS.map(s => (
+                      <SelectItem key={s.value} value={s.value} className="text-sm">
+                        {ar ? s.ar : s.en}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">{ar ? "الرسالة" : "Message"}</Label>
+                <Textarea
+                  value={fbMessage}
+                  onChange={e => setFbMessage(e.target.value)}
+                  placeholder={ar ? "اكتب رسالتك هنا…" : "Write your message here…"}
+                  rows={4}
+                  className={cn("text-sm resize-none", isRTL && "text-right")}
+                  dir={isRTL ? "rtl" : "ltr"}
+                />
+              </div>
+              {fbError && (
+                <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/10 px-3 py-2 rounded-lg">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {fbError}
+                </div>
+              )}
+              <div className={cn("flex pt-1", isRTL ? "justify-start" : "justify-end")}>
+                <Button size="sm" onClick={handleFeedbackSubmit} disabled={fbSending} className="gap-2">
+                  {fbSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  {fbSending
+                    ? (ar ? "جارٍ الإرسال…" : "Sending…")
+                    : (ar ? "إرسال" : "Send Message")}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
