@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
 import { sql } from "drizzle-orm";
-import { db, logger } from "@workspace/db";
+import { db } from "@workspace/db";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
