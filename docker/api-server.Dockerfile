@@ -71,11 +71,13 @@ COPY --from=build /app/artifacts/clinic-app/dist/public ./artifacts/api-server/d
 # DB schema sources needed by the boot-time drizzle-kit push
 COPY lib/db ./lib/db
 
+# Boot script: run schema push, then start the server
+COPY docker/start-api.sh /app/start-api.sh
+RUN chmod +x /app/start-api.sh
+
 ENV NODE_ENV=production \
     PORT=8080
 
 EXPOSE 8080
 
-WORKDIR /app/artifacts/api-server
-
-CMD ["node", "--enable-source-maps", "./dist/index.mjs"]
+CMD ["/bin/sh", "/app/start-api.sh"]

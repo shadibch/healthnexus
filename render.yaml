@@ -20,9 +20,7 @@ services:
     runtime: docker
     dockerfilePath: ./docker/api-server.Dockerfile
     dockerContext: .
-    # Create/patch tables on boot (idempotent), then start the server.
-    # The app serves both the compiled client and /api on the same port.
-    dockerCommand: sh -c "cd /app && pnpm --filter @workspace/db push-force && cd artifacts/api-server && exec node --enable-source-maps ./dist/index.mjs"
+    # Start sequence lives in docker/start-api.sh (image CMD): schema push, then server.
     healthCheckPath: /api/healthz
     plan: free          # free tier sleeps after 15 min idle; use starter+ for always-on
     autoDeploy: true
