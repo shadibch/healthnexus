@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useUser } from "@clerk/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { KeyRound, Loader2, Eye, EyeOff, ShieldCheck } from "lucide-react";
 
 export default function ChangePasswordPage() {
-  const { user } = useUser();
+  const { user } = useAuth();
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -38,14 +38,15 @@ export default function ChangePasswordPage() {
 
     setIsPending(true);
     try {
-      await user?.updatePassword({ currentPassword, newPassword, signOutOfOtherSessions: false });
+      await apiFetch("/users/change-password", {
+        method: "POST",
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
       await apiFetch("/users/mark-password-changed", { method: "POST" });
       qc.invalidateQueries({ queryKey: ["auth-me"] });
       toast({ title: "Password updated", description: "Welcome! You now have full access to your account." });
     } catch (err: any) {
       const msg =
-        err?.errors?.[0]?.longMessage ||
-        err?.errors?.[0]?.message ||
         err?.message ||
         "Please check your temporary password and try again.";
       toast({ title: "Failed to update password", description: msg, variant: "destructive" });
@@ -150,7 +151,7 @@ export default function ChangePasswordPage() {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground">
-          Logged in as <span className="font-medium">{user?.primaryEmailAddress?.emailAddress}</span>
+          Logged in as <span className="font-medium">{user?.email}</span>
         </p>
       </div>
     </div>

@@ -264,23 +264,31 @@ async function seedPharmacies(): Promise<void> {
   );
   if (parseInt(res3.rows[0].count) >= 5) {
     logger.info("Pharmacies already seeded, skipping.");
+  } else {
+    logger.info("Seeding pharmacies…");
+    await db.execute(sql`
+      INSERT INTO pharmacies (name, address, phone, latitude, longitude, is_open_24h) VALUES
+      ('Al Ain Pharmacy','Al Nahyan Camp, Abu Dhabi','+971-2-441-1234',24.450000,54.370000,false),
+      ('Medcare Pharmacy','Corniche Road, Abu Dhabi','+971-2-626-5678',24.465000,54.385000,true),
+      ('Life Pharmacy','Khalidiyah Mall, Abu Dhabi','+971-2-665-9012',24.440000,54.360000,false),
+      ('NMC Royal Pharmacy','Khalifa City A, Abu Dhabi','+971-2-819-3456',24.475000,54.395000,true),
+      ('Aster Pharmacy','Mussafah Industrial, Abu Dhabi','+971-2-555-7890',24.430000,54.410000,false),
+      ('Boots Pharmacy','Marina Mall, Abu Dhabi','+971-2-681-2345',24.460000,54.340000,false),
+      ('Al Nahdi Pharmacy','Al Muroor Road, Abu Dhabi','+971-2-443-6789',24.480000,54.370000,true),
+      ('Bin Sina Pharmacy','Tourist Club Area, Abu Dhabi','+971-2-672-0123',24.420000,54.380000,false),
+      ('Care Pharmacy','Airport Road, Abu Dhabi','+971-2-449-4567',24.470000,54.420000,false),
+      ('Gulf Drug Store','Al Khalidiyah, Abu Dhabi','+971-2-666-8901',24.445000,54.350000,false)
+    `);
+    logger.info("Pharmacies seeded (10 rows).");
+  }
+
+  const invRes = await db.execute<{ count: string }>(
+    sql`SELECT count(*)::text AS count FROM pharmacy_inventory`
+  );
+  if (parseInt(invRes.rows[0].count) > 0) {
+    logger.info("Pharmacy inventory already seeded, skipping.");
     return;
   }
-  logger.info("Seeding pharmacies…");
-  await db.execute(sql`
-    INSERT INTO pharmacies (name, address, phone, latitude, longitude, is_open_24h) VALUES
-    ('Al Ain Pharmacy','Al Nahyan Camp, Abu Dhabi','+971-2-441-1234',24.450000,54.370000,false),
-    ('Medcare Pharmacy','Corniche Road, Abu Dhabi','+971-2-626-5678',24.465000,54.385000,true),
-    ('Life Pharmacy','Khalidiyah Mall, Abu Dhabi','+971-2-665-9012',24.440000,54.360000,false),
-    ('NMC Royal Pharmacy','Khalifa City A, Abu Dhabi','+971-2-819-3456',24.475000,54.395000,true),
-    ('Aster Pharmacy','Mussafah Industrial, Abu Dhabi','+971-2-555-7890',24.430000,54.410000,false),
-    ('Boots Pharmacy','Marina Mall, Abu Dhabi','+971-2-681-2345',24.460000,54.340000,false),
-    ('Al Nahdi Pharmacy','Al Muroor Road, Abu Dhabi','+971-2-443-6789',24.480000,54.370000,true),
-    ('Bin Sina Pharmacy','Tourist Club Area, Abu Dhabi','+971-2-672-0123',24.420000,54.380000,false),
-    ('Care Pharmacy','Airport Road, Abu Dhabi','+971-2-449-4567',24.470000,54.420000,false),
-    ('Gulf Drug Store','Al Khalidiyah, Abu Dhabi','+971-2-666-8901',24.445000,54.350000,false)
-  `);
-  logger.info("Pharmacies seeded (10 rows).");
 
   logger.info("Seeding pharmacy inventory…");
   await db.execute(sql`

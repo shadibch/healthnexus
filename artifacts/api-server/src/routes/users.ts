@@ -2,44 +2,8 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, usersTable, medicalCentersTable, staffInvitesTable, doctorsTable, patientsTable } from "@workspace/db";
 import { requireAuth, getSessionUser, primaryRole } from "../lib/session";
+import { hashPassword, verifyPassword } from "../lib/password";
 import { z } from "zod";
-
-const CLERK_API = "https://api.clerk.com/v1";
-
-async function clerkCreateUser(opts: {
-  emailAddress: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-}): Promise<{ id: string }> {
-  const res = await fetch(`${CLERK_API}/users`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      email_address: [opts.emailAddress],
-      password: opts.password,
-      first_name: opts.firstName,
-      last_name: opts.lastName,
-      skip_password_checks: true,
-    }),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as any;
-    const msg = body?.errors?.[0]?.long_message || body?.errors?.[0]?.message || "Failed to create account";
-    throw new Error(msg);
-  }
-  return res.json() as Promise<{ id: string }>;
-}
-
-async function clerkDeleteUser(clerkId: string): Promise<void> {
-  await fetch(`${CLERK_API}/users/${clerkId}`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}` },
-  }).catch(() => {});
-}
 
 const router: IRouter = Router();
 
@@ -150,7 +114,6 @@ router.post("/users/onboarding/admin", requireAuth, async (req, res): Promise<vo
     const lastName = nameParts.slice(1).join(" ") || "-";
     [doctor] = await db.insert(doctorsTable).values({
       userId: session.userId,
-      clerkId: session.clerkId ?? null,
       firstName,
       lastName,
       specialization: specialization?.trim() || "General Practitioner",
@@ -179,7 +142,6 @@ router.post("/users/onboarding/patient", requireAuth, async (req, res): Promise<
   const data = parsed.data;
   const [patient] = await db.insert(patientsTable).values({
     userId: session.userId,
-    clerkId: session.clerkId,
     firstName: data.firstName,
     lastName: data.lastName,
     dateOfBirth: data.dateOfBirth ?? null,
@@ -222,26 +184,20 @@ router.post("/users/create-staff", requireAuth, async (req, res): Promise<void> 
   const firstName = nameParts[0] ?? name;
   const lastName = nameParts.slice(1).join(" ") || "-";
 
-  let clerkId: string | null = null;
-  try {
-    const clerkUser = await clerkCreateUser({
-      emailAddress: email.toLowerCase(),
-      password: tempPassword,
-      firstName,
-      lastName,
-    });
-    clerkId = clerkUser.id;
-  } catch (err: any) {
-    res.status(409).json({ error: err.message || "Failed to create account in auth system" });
+  const existing = await db.query.usersTable.findFirst({
+    where: eq(usersTable.email, email.toLowerCase()),
+  });
+  if (existing) {
+    res.status(409).json({ error: "An account with this email already exists" });
     return;
   }
 
   let dbUser;
   try {
     [dbUser] = await db.insert(usersTable).values({
-      clerkId: clerkId!,
       email: email.toLowerCase(),
       name: name.trim(),
+      passwordHash: await hashPassword(tempPassword),
       role,
       roles: [role],
       medicalCenterId: session.medicalCenterId,
@@ -249,8 +205,7 @@ router.post("/users/create-staff", requireAuth, async (req, res): Promise<void> 
       mustChangePassword: true,
     }).returning();
   } catch (err) {
-    await clerkDeleteUser(clerkId!);
-    res.status(500).json({ error: "Failed to save user — account creation rolled back" });
+    res.status(500).json({ error: "Failed to create staff account" });
     return;
   }
 
@@ -258,7 +213,6 @@ router.post("/users/create-staff", requireAuth, async (req, res): Promise<void> 
     try {
       await db.insert(doctorsTable).values({
         userId: dbUser.id,
-        clerkId: clerkId!,
         firstName,
         lastName,
         specialization: specialization?.trim() || "General Practitioner",
@@ -311,6 +265,43 @@ router.post("/users/mark-password-changed", requireAuth, async (req, res): Promi
   await db.update(usersTable)
     .set({ mustChangePassword: false })
     .where(eq(usersTable.id, session.userId));
+  res.json({ ok: true });
+});
+
+// ── POST /users/change-password ───────────────────────────────────────────────
+const ChangePasswordBody = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
+router.post("/users/change-password", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
+  const parsed = ChangePasswordBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "New password must be at least 8 characters" });
+    return;
+  }
+
+  const user = await db.query.usersTable.findFirst({ where: eq(usersTable.id, session.userId) });
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  const ok = await verifyPassword(parsed.data.currentPassword, user.passwordHash);
+  if (!ok) {
+    res.status(401).json({ error: "Current password is incorrect" });
+    return;
+  }
+  if (parsed.data.currentPassword === parsed.data.newPassword) {
+    res.status(400).json({ error: "New password must be different from the current one" });
+    return;
+  }
+
+  await db.update(usersTable)
+    .set({ passwordHash: await hashPassword(parsed.data.newPassword) })
+    .where(eq(usersTable.id, session.userId));
+
   res.json({ ok: true });
 });
 
@@ -372,7 +363,6 @@ router.patch("/users/:id/roles", requireAuth, async (req, res): Promise<void> =>
       const nameParts = (target.name ?? target.email).split(/\s+/);
       await db.insert(doctorsTable).values({
         userId: target.id,
-        clerkId: target.clerkId,
         firstName: nameParts[0] ?? target.email,
         lastName: nameParts.slice(1).join(" ") || "-",
         specialization: "General Practitioner",

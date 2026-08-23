@@ -1,13 +1,11 @@
 import { createContext, useContext, type ReactNode } from "react";
-import { useUser } from "@clerk/react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./api";
 
 export type AppRole = "admin" | "doctor" | "patient" | "pharmacist" | "pharmacy" | "receptionist" | "pending";
 
 export interface AuthUser {
   userId: number;
-  clerkId: string;
   /** Primary (highest-priority) role — for display */
   role: AppRole;
   /** All roles this user holds */
@@ -32,20 +30,21 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType>({ user: null, loading: true });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { isLoaded: clerkLoaded, isSignedIn } = useUser();
-
   const { data: user, isLoading } = useQuery<AuthUser | null>({
     queryKey: ["auth-me"],
-    queryFn: () => apiFetch<AuthUser>("/auth/me"),
-    enabled: clerkLoaded && !!isSignedIn,
-    retry: false,
+    queryFn: async () => {
+      try {
+        return await apiFetch<AuthUser>("/auth/me");
+      } catch {
+        // 401 → not signed in
+        return null;
+      }
+    },
     staleTime: 30_000,
   });
 
-  const loading = !clerkLoaded || (!!isSignedIn && isLoading);
-
   return (
-    <AuthContext.Provider value={{ user: user ?? null, loading }}>
+    <AuthContext.Provider value={{ user: user ?? null, loading: isLoading }}>
       {children}
     </AuthContext.Provider>
   );
@@ -53,4 +52,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   return useContext(AuthContext);
+}
+
+/** Sign out on the server and reset all cached queries */
+export async function signOutAndReset(qc: ReturnType<typeof useQueryClient>): Promise<void> {
+  try {
+    await apiFetch("/auth/logout", { method: "POST" });
+  } catch {
+    // already logged out or network error — proceed with local reset
+  }
+  qc.clear();
 }

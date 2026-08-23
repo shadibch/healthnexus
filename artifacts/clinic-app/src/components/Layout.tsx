@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useRole } from "@/lib/role";
-import { useAuth } from "@/lib/auth";
-import { useClerk } from "@clerk/react";
+import { useAuth, signOutAndReset } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { useNavBadges } from "@/hooks/use-badges";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -162,9 +161,8 @@ type DoctorProfile = {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { role, roles } = useRole();
   const { user } = useAuth();
-  const { signOut } = useClerk();
   const { t, lang, setLang, isRTL } = useI18n();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const badges = useNavBadges();
   const { clinicName, logoBase64 } = useClinicSettings();
   const qc = useQueryClient();
@@ -228,7 +226,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const items = buildNav(roles, { t, lang, badges });
   const totalAlerts = badges.prescriptions + badges.stock;
 
-  const handleLogout = () => signOut({ redirectUrl: `${import.meta.env.BASE_URL}sign-in` });
+  const handleLogout = async () => {
+    await signOutAndReset(qc);
+    setLocation("/sign-in");
+  };
 
   // Sidebar role pill — primary role + count of extras
   const extraRoles = roles.filter(r => r !== role);

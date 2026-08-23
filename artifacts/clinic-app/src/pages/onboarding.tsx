@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useClerk } from "@clerk/react";
+import { useLocation } from "wouter";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
+import { useAuth, signOutAndReset } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,8 +37,13 @@ type Step = "role" | "admin-center" | "patient-profile";
 
 export default function OnboardingPage() {
   const { user } = useAuth();
-  const { signOut } = useClerk();
   const qc = useQueryClient();
+  const [, setLocation] = useLocation();
+
+  async function handleSignOut() {
+    await signOutAndReset(qc);
+    setLocation("/sign-in");
+  }
 
   const initialStep: Step = user?.role === "admin" ? "admin-center"
     : user?.role === "patient" ? "patient-profile"
@@ -257,7 +262,7 @@ export default function OnboardingPage() {
               </Button>
 
               <button
-                onClick={() => signOut()}
+                onClick={handleSignOut}
                 className="w-full text-xs text-slate-400 hover:text-slate-600 text-center mt-2"
               >
                 Sign out
