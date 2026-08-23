@@ -59,12 +59,17 @@ COPY lib/integrations-openai-ai-react/package.json lib/integrations-openai-ai-re
 COPY lib/integrations-openai-ai-server/package.json lib/integrations-openai-ai-server/
 COPY scripts/package.json scripts/
 
-# Production dependencies only (small)
-RUN pnpm install --frozen-lockfile --prod --filter @workspace/api-server...
+# Dependencies for the API server and the DB package (drizzle-kit runs
+# migrations at container start on platforms like Render where docker-compose
+# is not available)
+RUN pnpm install --frozen-lockfile --filter @workspace/api-server... --filter @workspace/db...
 
 # Built server bundle + compiled client served as static files
 COPY --from=build /app/artifacts/api-server/dist ./artifacts/api-server/dist
 COPY --from=build /app/artifacts/clinic-app/dist/public ./artifacts/api-server/dist/public
+
+# DB schema sources needed by the boot-time drizzle-kit push
+COPY lib/db ./lib/db
 
 ENV NODE_ENV=production \
     PORT=8080
