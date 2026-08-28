@@ -33,6 +33,23 @@ services:
         generateValue: true
       - key: NODE_ENV
         value: production
+      # Public URL used in verification / password-reset email links.
+      # Replace with the final production URL (e.g. https://healthnexus.onrender.com)
+      - key: APP_BASE_URL
+        sync: false
+      # SMTP for verification + password-reset emails — set these in the dashboard
+      - key: SMTP_HOST
+        value: smtp.hostinger.com
+      - key: SMTP_PORT
+        value: "465"
+      - key: SMTP_SECURE
+        value: "true"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        value: HealthNexus <info@camsclinic.org>
       # Optional — only needed for the AI assistant feature
       - key: OPENAI_API_KEY
         sync: false

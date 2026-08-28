@@ -18,6 +18,7 @@ export interface AuthUser {
   patientDbId: number | null;
   aiAssistantEnabled: boolean;
   subscriptionPlan: string;
+  emailVerified: boolean;
   mustChangePassword: boolean;
   deactivated: boolean;
 }

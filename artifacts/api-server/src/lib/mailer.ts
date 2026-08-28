@@ -12,7 +12,7 @@ export interface MailOptions {
 export async function sendEmail(opts: MailOptions): Promise<void> {
   if (!process.env.SMTP_HOST) {
     logger.info({ to: opts.to, subject: opts.subject }, "[DEV] sendEmail — SMTP not configured, logging only");
-    logger.debug({ text: opts.text }, "[DEV] Email body");
+    logger.info({ text: opts.text }, "[DEV] Email body");
     return;
   }
 

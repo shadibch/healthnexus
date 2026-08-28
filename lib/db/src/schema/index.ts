@@ -13,6 +13,7 @@ export * from "./pharmacies";
 export * from "./pharmacy-inventory";
 export * from "./clinic-settings";
 export * from "./users";
+export * from "./email-tokens";
 export * from "./medical-centers";
 export * from "./staff-invites";
 export * from "./reminder-configs";

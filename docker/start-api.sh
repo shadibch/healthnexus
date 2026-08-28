@@ -3,10 +3,10 @@ set -e
 
 cd /app
 
-# Create/patch database tables on boot (idempotent).
+# Apply committed, idempotent drizzle migrations on boot (journal-tracked).
 # Required on platforms like Render where there is no docker-compose
-# db-migrate service; harmless (no-op) when the schema already matches.
-pnpm --filter @workspace/db push-force
+# db-migrate service; harmless (no-op) when migrations are already applied.
+pnpm --filter @workspace/db db:migrate
 
 cd artifacts/api-server
 exec node --enable-source-maps ./dist/index.mjs

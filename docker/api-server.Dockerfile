@@ -68,10 +68,10 @@ RUN pnpm install --frozen-lockfile --filter @workspace/api-server... --filter @w
 COPY --from=build /app/artifacts/api-server/dist ./artifacts/api-server/dist
 COPY --from=build /app/artifacts/clinic-app/dist/public ./artifacts/api-server/dist/public
 
-# DB schema sources needed by the boot-time drizzle-kit push
+# DB schema sources + migrations needed by the boot-time drizzle-kit migrate
 COPY lib/db ./lib/db
 
-# Boot script: run schema push, then start the server
+# Boot script: run migrations, then start the server
 COPY docker/start-api.sh /app/start-api.sh
 RUN chmod +x /app/start-api.sh
 

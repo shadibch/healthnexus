@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useI18n } from "@/lib/i18n";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +14,7 @@ export default function ChangePasswordPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { t } = useI18n();
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -24,11 +26,11 @@ export default function ChangePasswordPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
-      toast({ title: "Passwords don't match", description: "Please make sure both fields are identical.", variant: "destructive" });
+      toast({ title: t("passwordsDontMatch"), variant: "destructive" });
       return;
     }
     if (newPassword.length < 8) {
-      toast({ title: "Password too short", description: "New password must be at least 8 characters.", variant: "destructive" });
+      toast({ title: t("passwordMin"), variant: "destructive" });
       return;
     }
     if (newPassword === currentPassword) {
@@ -44,7 +46,7 @@ export default function ChangePasswordPage() {
       });
       await apiFetch("/users/mark-password-changed", { method: "POST" });
       qc.invalidateQueries({ queryKey: ["auth-me"] });
-      toast({ title: "Password updated", description: "Welcome! You now have full access to your account." });
+      toast({ title: t("passwordUpdated") });
     } catch (err: any) {
       const msg =
         err?.message ||
@@ -96,7 +98,7 @@ export default function ChangePasswordPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="newPw">New Password</Label>
+                <Label htmlFor="newPw">{t("newPassword")}</Label>
                 <div className="relative">
                   <Input
                     id="newPw"
@@ -120,7 +122,7 @@ export default function ChangePasswordPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="confirmPw">Confirm New Password</Label>
+                <Label htmlFor="confirmPw">{t("confirmPassword")}</Label>
                 <Input
                   id="confirmPw"
                   type="password"
@@ -131,7 +133,7 @@ export default function ChangePasswordPage() {
                   autoComplete="new-password"
                 />
                 {confirmPassword && newPassword !== confirmPassword && (
-                  <p className="text-xs text-destructive">Passwords don't match</p>
+                  <p className="text-xs text-destructive">{t("passwordsDontMatch")}</p>
                 )}
               </div>
 

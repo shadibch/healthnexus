@@ -50,6 +50,7 @@ export interface SessionUser {
   patientDbId: number | null;
   aiAssistantEnabled: boolean;
   subscriptionPlan: string;
+  emailVerified: boolean;
   mustChangePassword: boolean;
   deactivated: boolean;
 }
@@ -109,6 +110,7 @@ export async function resolveSessionUser(userId: number): Promise<SessionUser | 
     patientDbId,
     aiAssistantEnabled: user.aiAssistantEnabled,
     subscriptionPlan: user.subscriptionPlan,
+    emailVerified: user.emailVerified,
     mustChangePassword: user.mustChangePassword,
     deactivated: user.deactivated,
   };

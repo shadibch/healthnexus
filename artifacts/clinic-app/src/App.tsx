@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { RoleProvider } from "@/lib/role";
 import { AuthProvider, useAuth, type AuthUser } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
-import { I18nProvider } from "@/lib/i18n";
+import { I18nProvider, useI18n } from "@/lib/i18n";
 import Layout from "@/components/Layout";
 import OnboardingPage from "@/pages/onboarding";
 import DashboardPage from "@/pages/dashboard";
@@ -31,8 +31,11 @@ import RemindersPage from "@/pages/reminders";
 import SearchEncountersPage from "@/pages/search-encounters";
 import AdminPage from "@/pages/admin";
 import ChangePasswordPage from "@/pages/change-password";
+import VerifyEmailPage, { VerifyPendingGate, OtpVerifyForm } from "@/pages/verify-email";
+import ForgotPasswordPage from "@/pages/forgot-password";
+import ResetPasswordPage from "@/pages/reset-password";
 import NotFound from "@/pages/not-found";
-import { Stethoscope, Loader2, LogIn, UserPlus, Eye, EyeOff } from "lucide-react";
+import { Stethoscope, Loader2, LogIn, UserPlus, Eye, EyeOff, MailCheck } from "lucide-react";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 10_000, retry: 1 } },
@@ -87,27 +90,73 @@ function PasswordInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
 function SignInPage() {
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
+  const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [notVerified, setNotVerified] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function attemptLogin(em: string, pw: string) {
     setError(null);
     setPending(true);
     try {
       const user = await apiFetch<AuthUser>("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: em, password: pw }),
       });
       qc.setQueryData(["auth-me"], user);
       setLocation("/");
+      return true;
     } catch (err: any) {
-      setError(err?.message || "Invalid email or password");
+      if (err?.status === 403 && err?.body?.error === "ACCOUNT_NOT_VERIFIED") {
+        setNotVerified(em);
+        return false;
+      }
+      setError(err?.message || t("invalidCredentials"));
+      return false;
     } finally {
       setPending(false);
     }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    await attemptLogin(email, password);
+  }
+
+  async function handleVerified() {
+    // Email now verified → retry the login with the same credentials
+    setNotVerified(null);
+    await attemptLogin(email, password);
+  }
+
+  if (notVerified) {
+    return (
+      <AuthShell>
+        <Card className="shadow-lg">
+          <CardContent className="pt-6 space-y-4">
+            <div className="text-center space-y-1">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center mx-auto mb-2">
+                <MailCheck className="w-6 h-6 text-amber-600" />
+              </div>
+              <h2 className="text-lg font-bold text-foreground">{t("accountNotActivated")}</h2>
+              <p className="text-sm text-muted-foreground">
+                {t("accountNotActivatedMsg")}{" "}
+                <span className="font-medium text-foreground">{notVerified}</span>
+              </p>
+            </div>
+            <OtpVerifyForm email={notVerified} onVerified={handleVerified} />
+            <a
+              href={`${basePath}/forgot-password`}
+              className="block text-center text-sm font-medium text-emerald-600 hover:text-emerald-700"
+            >
+              {t("forgotPassword")}
+            </a>
+          </CardContent>
+        </Card>
+      </AuthShell>
+    );
   }
 
   return (
@@ -143,9 +192,17 @@ function SignInPage() {
             )}
             <Button type="submit" className="w-full" disabled={!email || !password || pending}>
               {pending
-                ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Signing in…</>
-                : <><LogIn className="w-4 h-4 mr-2" />Sign In</>}
+                ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{t("signingIn")}</>
+                : <><LogIn className="w-4 h-4 mr-2" />{t("signIn")}</>}
             </Button>
+            <p className="text-center">
+              <a
+                href={`${basePath}/forgot-password`}
+                className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
+              >
+                {t("forgotPassword")}
+              </a>
+            </p>
           </form>
         </CardContent>
       </Card>
@@ -160,9 +217,11 @@ function SignInPage() {
 function SignUpPage() {
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -170,7 +229,11 @@ function SignUpPage() {
     e.preventDefault();
     setError(null);
     if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+      setError(t("passwordMin"));
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError(t("passwordsDontMatch"));
       return;
     }
     setPending(true);
@@ -194,7 +257,7 @@ function SignUpPage() {
         <CardContent className="pt-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="name">Full Name</Label>
+              <Label htmlFor="name">{t("firstNameLabel")}</Label>
               <Input
                 id="name"
                 value={name}
@@ -204,7 +267,7 @@ function SignUpPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="su-email">Email</Label>
+              <Label htmlFor="su-email">{t("emailAddress")}</Label>
               <Input
                 id="su-email"
                 type="email"
@@ -216,7 +279,7 @@ function SignUpPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="su-password">Password</Label>
+              <Label htmlFor="su-password">{t("password")}</Label>
               <PasswordInput
                 id="su-password"
                 value={password}
@@ -226,13 +289,27 @@ function SignUpPage() {
                 autoComplete="new-password"
               />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="su-confirm">{t("confirmPassword")}</Label>
+              <PasswordInput
+                id="su-confirm"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="Repeat your password"
+                required
+                autoComplete="new-password"
+              />
+              {confirmPassword && password !== confirmPassword && (
+                <p className="text-xs text-destructive">{t("passwordsDontMatch")}</p>
+              )}
+            </div>
             {error && (
               <p className="text-sm text-destructive bg-red-50 border border-red-200 rounded-md px-3 py-2">{error}</p>
             )}
             <Button type="submit" className="w-full" disabled={!email || !password || pending}>
               {pending
-                ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Creating account…</>
-                : <><UserPlus className="w-4 h-4 mr-2" />Create Account</>}
+                ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{t("creatingAccount")}</>
+                : <><UserPlus className="w-4 h-4 mr-2" />{t("createAccount")}</>}
             </Button>
           </form>
         </CardContent>
@@ -276,6 +353,11 @@ function AppRoutes() {
         </div>
       </div>
     );
+  }
+
+  // Email not verified yet → block until the account is activated
+  if (!user.emailVerified) {
+    return <VerifyPendingGate />;
   }
 
   // Must change temporary password before accessing anything else
@@ -331,6 +413,9 @@ function App() {
               <Switch>
                 <Route path="/sign-in/*?" component={SignInPage} />
                 <Route path="/sign-up/*?" component={SignUpPage} />
+                <Route path="/verify-email/*?" component={VerifyEmailPage} />
+                <Route path="/forgot-password/*?" component={ForgotPasswordPage} />
+                <Route path="/reset-password/*?" component={ResetPasswordPage} />
                 <Route component={AppRoutes} />
               </Switch>
               <Toaster />

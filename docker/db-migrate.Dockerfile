@@ -22,8 +22,8 @@ COPY scripts/package.json scripts/
 # Install only @workspace/db and its workspace dependencies
 RUN pnpm install --frozen-lockfile --filter @workspace/db...
 
-# Full sources (schema + drizzle config)
+# Full sources (schema, migrations + drizzle config)
 COPY lib/db ./lib/db
 
-# Idempotent: pushes the Drizzle schema, creating any missing tables
-CMD ["sh", "-c", "pnpm --filter @workspace/db push-force"]
+# Applies committed, journal-tracked Drizzle migrations
+CMD ["sh", "-c", "pnpm --filter @workspace/db db:migrate"]
