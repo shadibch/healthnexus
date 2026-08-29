@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, friendlyError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,7 +62,7 @@ export default function ResetPasswordPage() {
       } else if (msg === "INVALID_RESET_TOKEN") {
         setTokenIssue(t("resetTokenInvalid"));
       } else {
-        setError(msg || t("resetPassword"));
+        setError(friendlyError(err, t) || t("resetPassword"));
       }
     } finally {
       setPending(false);

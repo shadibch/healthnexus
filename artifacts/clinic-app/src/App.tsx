@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { RoleProvider } from "@/lib/role";
 import { AuthProvider, useAuth, type AuthUser } from "@/lib/auth";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, friendlyError } from "@/lib/api";
 import { I18nProvider, useI18n } from "@/lib/i18n";
 import Layout from "@/components/Layout";
 import OnboardingPage from "@/pages/onboarding";
@@ -34,6 +34,7 @@ import ChangePasswordPage from "@/pages/change-password";
 import VerifyEmailPage, { VerifyPendingGate, OtpVerifyForm } from "@/pages/verify-email";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
+import FeedbackPage from "@/pages/feedback";
 import NotFound from "@/pages/not-found";
 import { Stethoscope, Loader2, LogIn, UserPlus, Eye, EyeOff, MailCheck } from "lucide-react";
 
@@ -113,7 +114,7 @@ function SignInPage() {
         setNotVerified(em);
         return false;
       }
-      setError(err?.message || t("invalidCredentials"));
+      setError(friendlyError(err, t));
       return false;
     } finally {
       setPending(false);
@@ -216,7 +217,6 @@ function SignInPage() {
 
 function SignUpPage() {
   const qc = useQueryClient();
-  const [, setLocation] = useLocation();
   const { t } = useI18n();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -224,6 +224,7 @@ function SignUpPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [justCreated, setJustCreated] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -243,12 +244,42 @@ function SignUpPage() {
         body: JSON.stringify({ name: name || undefined, email, password }),
       });
       qc.setQueryData(["auth-me"], user);
-      setLocation("/");
+      // Show a clear instruction: check the inbox to activate the account
+      setJustCreated(email);
     } catch (err: any) {
-      setError(err?.message || "Failed to create account");
+      setError(friendlyError(err, t) || "Failed to create account");
     } finally {
       setPending(false);
     }
+  }
+
+  if (justCreated) {
+    return (
+      <AuthShell>
+        <Card className="shadow-lg">
+          <CardContent className="pt-6 text-center space-y-3">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto">
+              <MailCheck className="w-7 h-7 text-emerald-600" />
+            </div>
+            <h2 className="text-lg font-bold text-foreground">{t("signUpSuccessTitle")}</h2>
+            <p className="text-sm text-muted-foreground">{t("signUpSuccessMsg")}</p>
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{justCreated}</span>
+            </p>
+            <OtpVerifyForm
+              email={justCreated}
+              onVerified={() => setJustCreated(null)}
+            />
+            <a
+              href={`${basePath}/sign-in`}
+              className="block text-center text-sm font-medium text-emerald-600 hover:text-emerald-700"
+            >
+              {t("goToSignIn")}
+            </a>
+          </CardContent>
+        </Card>
+      </AuthShell>
+    );
   }
 
   return (
@@ -324,6 +355,7 @@ function SignUpPage() {
 
 function AppRoutes() {
   const { user, loading } = useAuth();
+  const { t } = useI18n();
 
   if (loading) {
     return (
@@ -346,10 +378,8 @@ function AppRoutes() {
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <div className="text-center max-w-sm space-y-3">
           <div className="text-5xl">🚫</div>
-          <h1 className="text-xl font-bold text-foreground">Account Deactivated</h1>
-          <p className="text-sm text-muted-foreground">
-            Your account has been deactivated by an administrator. Please contact your clinic admin for assistance.
-          </p>
+          <h1 className="text-xl font-bold text-foreground">{t("accountNotActivated")}</h1>
+          <p className="text-sm text-muted-foreground">{t("accountDeactivated")}</p>
         </div>
       </div>
     );
@@ -396,6 +426,7 @@ function AppRoutes() {
           <Route path="/reminders" component={RemindersPage} />
           <Route path="/search-encounters" component={SearchEncountersPage} />
           <Route path="/admin" component={AdminPage} />
+          <Route path="/feedback" component={FeedbackPage} />
           <Route component={NotFound} />
         </Switch>
       </Layout>

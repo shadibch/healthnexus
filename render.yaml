@@ -50,6 +50,9 @@ services:
         sync: false
       - key: SMTP_FROM
         value: HealthNexus <info@camsclinic.org>
+      # Where customer feedback submissions are emailed
+      - key: FEEDBACK_EMAIL
+        value: support@camsclinic.org
       # Optional — only needed for the AI assistant feature
       - key: OPENAI_API_KEY
         sync: false

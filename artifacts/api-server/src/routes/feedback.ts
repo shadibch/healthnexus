@@ -6,7 +6,7 @@ import { sendEmail } from "../lib/mailer";
 
 const router = Router();
 
-const CLINIC_EMAIL = process.env.FEEDBACK_EMAIL ?? "info@camsclinic.org";
+const CLINIC_EMAIL = process.env.FEEDBACK_EMAIL ?? "support@camsclinic.org";
 
 const FeedbackSchema = z.object({
   name:    z.string().min(1).max(100),
@@ -26,14 +26,15 @@ router.post("/feedback", requireAuth, async (req, res) => {
   const timestamp = new Date().toLocaleString("en-AE", { timeZone: "Asia/Dubai" });
 
   try {
-    // ── Internal notification to the clinic ─────────────────────────────────
+    // ── Internal notification to the clinic (to CLINIC_EMAIL) ────────────────
+    // `from` is deliberately omitted so the mailer uses the authenticated
+    // SMTP sender (SMTP_FROM / info@…) — Hostinger rejects foreign senders.
     await sendEmail({
-      from: CLINIC_EMAIL,
       to: CLINIC_EMAIL,
       replyTo: email,
-      subject: `[ClinicFlow Feedback] ${subject} — ${name}`,
+      subject: `[HealthNexus Feedback] ${subject} — ${name}`,
       text: [
-        "New feedback received via ClinicFlow platform",
+        "New feedback received via HealthNexus platform",
         "",
         `From:    ${name}`,
         `Email:   ${email}`,
@@ -48,7 +49,7 @@ router.post("/feedback", requireAuth, async (req, res) => {
       html: `
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
           <div style="background:#059669;color:white;padding:20px 24px;border-radius:8px 8px 0 0">
-            <h2 style="margin:0;font-size:18px">New Feedback — ClinicFlow</h2>
+            <h2 style="margin:0;font-size:18px">New Feedback — HealthNexus</h2>
           </div>
           <div style="border:1px solid #e5e7eb;border-top:none;padding:24px;border-radius:0 0 8px 8px">
             <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
@@ -67,7 +68,6 @@ router.post("/feedback", requireAuth, async (req, res) => {
 
     // ── Confirmation to the user ─────────────────────────────────────────────
     await sendEmail({
-      from: CLINIC_EMAIL,
       to: email,
       subject: `We received your message — ${subject}`,
       text: [
@@ -86,7 +86,7 @@ router.post("/feedback", requireAuth, async (req, res) => {
         `For further queries, contact us directly at ${CLINIC_EMAIL}.`,
         "",
         "Best regards,",
-        "ClinicFlow Support Team",
+        "HealthNexus Support Team",
       ].join("\n"),
       html: `
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">

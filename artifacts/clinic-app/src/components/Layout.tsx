@@ -29,6 +29,7 @@ import {
   Check,
   X,
   FileSearch,
+  MessageSquare,
 } from "lucide-react";
 import { useClinicSettings } from "@/lib/clinic-settings";
 import { Button } from "@/components/ui/button";
@@ -147,6 +148,7 @@ function buildNav(
 
   // ── Settings / Feedback (all roles) ────────────────────────────────────────
   add({ href: "/settings", label: lang === "ar" ? "الإعدادات والدعم" : "Settings & Support", icon: Settings, badge: 0, badgeVariant: "red" });
+  add({ href: "/feedback", label: lang === "ar" ? "أرسل ملاحظاتك" : "Send your feedback", icon: MessageSquare, badge: 0, badgeVariant: "red" });
 
   return items;
 }

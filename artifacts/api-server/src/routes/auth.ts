@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request as ExpressRequest } from "express";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, usersTable, staffInvitesTable } from "@workspace/db";
@@ -29,8 +29,25 @@ router.get("/auth/me", (req, res): void => {
   res.json(user);
 });
 
-function appBaseUrl(): string {
-  return (process.env.APP_BASE_URL ?? `http://localhost:${process.env.PORT ?? 8080}`).replace(/\/$/, "");
+function appBaseUrl(req: ExpressRequest): string {
+  const envUrl = process.env.APP_BASE_URL?.trim();
+
+  // A real (non-localhost) APP_BASE_URL wins: canonical links even when the
+  // request arrives via an IP or forwarded host.
+  if (envUrl && !/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(envUrl)) {
+    return envUrl.replace(/\/$/, "");
+  }
+
+  // Otherwise derive from the request context so links point at the address
+  // the user is actually on (works behind reverse proxies).
+  const host = req.get("host");
+  if (host) {
+    const protocol = req.get("x-forwarded-proto")?.split(",")[0]?.trim() || req.protocol;
+    return `${protocol}://${host}`.replace(/\/$/, "");
+  }
+
+  // Last resort: the configured URL, or a localhost default.
+  return (envUrl || `http://localhost:${process.env.PORT ?? 8080}`).replace(/\/$/, "");
 }
 
 const RegisterBody = z.object({
@@ -84,7 +101,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   // Email verification — send failure must not block the account creation
   try {
     const verification = await createEmailVerification(created.id);
-    const verifyUrl = `${appBaseUrl()}/verify-email?token=${verification.linkToken}`;
+    const verifyUrl = `${appBaseUrl(req)}/verify-email?token=${verification.linkToken}`;
 
     await sendEmail({
       to: created.email,
@@ -226,7 +243,7 @@ router.post("/auth/resend-verification", async (req, res): Promise<void> => {
 
   try {
     const verification = await createEmailVerification(user.id);
-    const verifyUrl = `${appBaseUrl()}/verify-email?token=${verification.linkToken}`;
+    const verifyUrl = `${appBaseUrl(req)}/verify-email?token=${verification.linkToken}`;
 
     await sendEmail({
       to: user.email,
@@ -267,11 +284,11 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
   const user = await db.query.usersTable.findFirst({ where: eq(usersTable.email, email) });
 
   // Send to any non-deactivated account (verified or not) — a reset alone cannot
-// grant access to an unverified account, so this does not weaken security.
+  // grant access to an unverified account, so this does not weaken security.
   if (user && !user.deactivated) {
     try {
-    const bundle = await createPasswordResetToken(user.id);
-    const resetUrl = `${appBaseUrl()}/reset-password?token=${bundle.resetToken}`;
+      const bundle = await createPasswordResetToken(user.id);
+      const resetUrl = `${appBaseUrl(req)}/reset-password?token=${bundle.resetToken}`;
 
     await sendEmail({
       to: user.email,
@@ -290,9 +307,9 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
     });
 
     logger.info({ userId: user.id }, "password reset email sent");
-  } catch (err) {
-    logger.error({ err, userId: user.id }, "failed to send password reset email");
-  }
+    } catch (err) {
+      logger.error({ err, userId: user.id }, "failed to send password reset email");
+    }
   }
 
   res.status(200).json({ ok: true });

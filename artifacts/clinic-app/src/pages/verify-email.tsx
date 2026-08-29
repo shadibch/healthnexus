@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, friendlyError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
@@ -55,7 +55,9 @@ export function OtpVerifyForm({
       onVerified();
     } catch (err: any) {
       toast({
-        title: err?.message ?? "Invalid code",
+        title: err?.body?.error === "INVALID_OR_EXPIRED_VERIFICATION"
+          ? t("codeExpired")
+          : friendlyError(err, t),
         variant: "destructive",
       });
     } finally {
@@ -151,6 +153,9 @@ export function VerifyPendingGate() {
             <p className="text-sm text-muted-foreground">
               {t("accountNotActivatedMsg")}{" "}
               {user ? <span className="font-medium text-foreground">{user.email}</span> : null}
+            </p>
+            <p className="text-xs text-muted-foreground bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              {t("checkSpamFolder")}
             </p>
           </div>
           {user ? (

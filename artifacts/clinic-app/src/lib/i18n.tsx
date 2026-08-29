@@ -213,6 +213,30 @@ export const translations = {
     signUpSubtitle: "Create your account to get started",
     firstNameLabel: "Full Name",
     notActivatedSubtitle: "Account not activated yet",
+
+    // Account status
+    accountDeactivated: "Your account has been deactivated. Please contact the clinic administrator.",
+    checkSpamFolder: "If you don't see the email, check your spam or junk folder.",
+    signUpSuccessTitle: "Account created — activate your email",
+    signUpSuccessMsg: "A verification link and a 6-digit code were sent to your email. Please check your inbox and follow the instructions to activate your account.",
+    codeExpired: "The code is incorrect or has expired. Please try again or request a new code.",
+
+    // Feedback
+    feedback: "Send your feedback",
+    feedbackSubtitle: "Your feedback helps us improve. Tell us what you think — we read every message.",
+    feedbackTopic: "Topic",
+    feedbackMessage: "Your feedback",
+    feedbackMessagePlaceholder: "Write your feedback here…",
+    feedbackSend: "Send feedback",
+    feedbackSending: "Sending…",
+    feedbackSentTitle: "Thank you!",
+    feedbackSentMsg: "Your feedback has been sent to our support team. A confirmation will also be sent to your email.",
+    feedbackAnother: "Send another message",
+    feedbackFillAll: "Please fill in all fields.",
+    feedbackFailed: "Failed to send. Please try again.",
+    feedbackName: "Name",
+    feedbackEmail: "Email",
+    feedbackPickTopic: "Choose a topic…",
   },
   ar: {
     // Nav / Layout
@@ -424,6 +448,30 @@ export const translations = {
     signUpSubtitle: "أنشئ حسابك للبدء",
     firstNameLabel: "الاسم الكامل",
     notActivatedSubtitle: "لم يتم تفعيل الحساب بعد",
+
+    // Account status
+    accountDeactivated: "تم إيقاف حسابك. يرجى التواصل مع مسؤول العيادة.",
+    checkSpamFolder: "إذا لم تجد الرسالة، تحقق من مجلد البريد العشوائي أو غير المرغوب فيه.",
+    signUpSuccessTitle: "تم إنشاء الحساب — فعّل بريدك الإلكتروني",
+    signUpSuccessMsg: "تم إرسال رابط التحقق والرمز المكوّن من 6 أرقام إلى بريدك الإلكتروني. يرجى التحقق من صندوق الوارد واتباع التعليمات لتفعيل حسابك.",
+    codeExpired: "الرمز غير صحيح أو انتهت صلاحيته. يرجى المحاولة مرة أخرى أو طلب رمز جديد.",
+
+    // Feedback
+    feedback: "أرسل ملاحظاتك",
+    feedbackSubtitle: "ملاحظاتك تساعدنا على التحسّن. أخبرنا برأيك — نقرأ كل رسالة.",
+    feedbackTopic: "الموضوع",
+    feedbackMessage: "ملاحظاتك",
+    feedbackMessagePlaceholder: "اكتب ملاحظاتك هنا…",
+    feedbackSend: "إرسال الملاحظات",
+    feedbackSending: "جارٍ الإرسال…",
+    feedbackSentTitle: "شكراً لك!",
+    feedbackSentMsg: "تم إرسال ملاحظاتك إلى فريق الدعم لدينا. كما سيصلك تأكيد على بريدك الإلكتروني.",
+    feedbackAnother: "إرسال رسالة أخرى",
+    feedbackFillAll: "يرجى تعبئة جميع الحقول.",
+    feedbackFailed: "فشل الإرسال. حاول مجدداً.",
+    feedbackName: "الاسم",
+    feedbackEmail: "البريد الإلكتروني",
+    feedbackPickTopic: "اختر موضوعاً…",
   },
 } as const;
 
