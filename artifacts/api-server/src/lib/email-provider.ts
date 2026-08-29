@@ -17,17 +17,13 @@ const GREETING_TIMEOUT_MS = 10_000;
 /**
  * Resolve the "from" address used for a given message.
  * - Explicit opts.from wins.
- * - HTTP provider (Resend) uses SMTP_FROM/SMTP_USER so the sender address stays
- *   consistent and verified.
+ * - HTTP provider (Resend) uses RESEND_FROM (a verified Resend-domain address),
+ *   falling back to SMTP_FROM / SMTP_USER for consistency.
  */
 function resolveFrom(opts: EmailProviderOptions): string {
-  return (
-    opts.from ??
-    process.env.SMTP_FROM ??
-    process.env.SMTP_USER ??
-    process.env.RESEND_FROM ??
-    "mailer@healthnexus.local"
-  );
+  if (opts.from) return opts.from;
+  if (process.env.RESEND_API_KEY && process.env.RESEND_FROM) return process.env.RESEND_FROM;
+  return process.env.SMTP_FROM ?? process.env.SMTP_USER ?? "mailer@healthnexus.local";
 }
 
 /**
@@ -45,7 +41,7 @@ async function sendViaResend(opts: EmailProviderOptions): Promise<void> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: process.env.RESEND_FROM ?? resolveFrom(opts),
+      from: resolveFrom(opts),
       to: [opts.to],
       reply_to: opts.replyTo,
       subject: opts.subject,
