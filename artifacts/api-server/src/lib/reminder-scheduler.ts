@@ -13,6 +13,7 @@ import {
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { format } from "date-fns";
 import { logger } from "./logger";
+import { sendEmail as sendEmailShared } from "./email-provider";
 
 // ── Template rendering ────────────────────────────────────────────────────────
 
@@ -42,30 +43,7 @@ async function sendEmail(
   subject: string,
   body: string,
 ): Promise<void> {
-  if (!process.env.SMTP_HOST) {
-    logger.info({ to, subject }, "[DEV] Email reminder — SMTP not configured, logging only");
-    logger.debug({ body }, "[DEV] Email body");
-    return;
-  }
-
-  // Dynamic import so nodemailer is optional
-  const nodemailer = await import("nodemailer");
-  const transporter = nodemailer.default.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT ?? 587),
-    secure: process.env.SMTP_SECURE === "true",
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
-
-  await transporter.sendMail({
-    from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
-    to,
-    subject,
-    text: body,
-  });
+  await sendEmailShared({ to, subject, text: body });
 }
 
 // ── Channel: WhatsApp (Twilio) ────────────────────────────────────────────────

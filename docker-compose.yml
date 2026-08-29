@@ -51,6 +51,8 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-}
       FEEDBACK_EMAIL: ${FEEDBACK_EMAIL:-support@camsclinic.org}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
     ports:

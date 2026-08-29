@@ -37,6 +37,14 @@ services:
       # Replace with the final production URL (e.g. https://healthnexus.onrender.com)
       - key: APP_BASE_URL
         sync: false
+      # EMAIL PROVIDER — Render free tier BLOCKS outbound SMTP on ports 25/465/587,
+      # so prefer the Resend HTTP API (HTTPS/443) on free tier. Set RESEND_API_KEY in
+      # the dashboard; it overrides SMTP when present. For paid instances you can keep
+      # using SMTP (SMTP_HOST/PORT/USER/PASS) below instead.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        value: HealthNexus <no-reply@camsclinic.org>
       # SMTP for verification + password-reset emails — set these in the dashboard
       - key: SMTP_HOST
         value: smtp.hostinger.com
