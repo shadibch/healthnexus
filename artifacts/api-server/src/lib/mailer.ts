@@ -25,8 +25,7 @@ export async function sendEmail(opts: MailOptions): Promise<void> {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
-	logger: true, // Output logs to stdout / console
-  debug: true,  //
+	
   });
 
   await transporter.sendMail({
