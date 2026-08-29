@@ -58,6 +58,45 @@ async function sendViaResend(opts: EmailProviderOptions): Promise<void> {
 }
 
 /**
+ * Send via the Hostinger Mail API (HTTPS / port 443). Works on Render's free
+ * tier. The sender is the mailbox the API token is scoped to (e.g.
+ * info@camsclinic.org), so there is no `from` field in the payload.
+ * Endpoint: POST /api/v1/mailboxes/{mailboxResourceId}/send
+ * (openapi: https://raw.githubusercontent.com/hostinger/mail-api/main/openapi.json)
+ */
+async function sendViaHostinger(opts: EmailProviderOptions): Promise<void> {
+  const token = process.env.HOSTINGER_MAIL_API_TOKEN;
+  const mailboxId = process.env.HOSTINGER_MAILBOX_ID;
+  if (!token || !mailboxId) {
+    throw new Error("HOSTINGER_MAIL_API_TOKEN and HOSTINGER_MAILBOX_ID are required");
+  }
+
+  const res = await fetch(
+    `https://api.mail.hostinger.com/api/v1/mailboxes/${mailboxId}/send`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to: [opts.to],
+        cc: opts.replyTo ? [opts.replyTo] : undefined,
+        subject: opts.subject,
+        text: opts.text,
+        html: opts.html,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    },
+  );
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Hostinger Mail API error ${res.status}: ${body}`);
+  }
+}
+
+/**
  * Send via SMTP (nodemailer). Preferred locally / on paid hosts where outbound
  * SMTP is allowed.
  */
@@ -90,18 +129,25 @@ async function sendViaSmtp(opts: EmailProviderOptions): Promise<void> {
 }
 
 /**
- * Send an email. Provider selection order:
- *   1. Resend HTTP API  (if RESEND_API_KEY set)  — works on Render free tier
- *   2. SMTP             (if SMTP_HOST set)        — local / paid hosts
- *   3. Log-only         (neither set)             — local dev without mail
+ * Send an email. Provider selection order.
  */
 export async function sendEmail(opts: EmailProviderOptions): Promise<void> {
+  // 1. Hostinger Mail API (HTTPS/443) — recommended on Render free tier when
+  //    the user already has a Hostinger mailbox. Overrides SMTP.
+  if (process.env.HOSTINGER_MAIL_API_TOKEN && process.env.HOSTINGER_MAILBOX_ID) {
+    logger.info({ to: opts.to, subject: opts.subject, provider: "hostinger" }, "sending email via Hostinger Mail API");
+    await sendViaHostinger(opts);
+    return;
+  }
+
+  // 2. Resend HTTP API (HTTPS/443) — also works on Render free tier.
   if (process.env.RESEND_API_KEY) {
     logger.info({ to: opts.to, subject: opts.subject, provider: "resend" }, "sending email via Resend API");
     await sendViaResend(opts);
     return;
   }
 
+  // 3. SMTP — local / paid hosts where outbound SMTP is allowed.
   if (process.env.SMTP_HOST) {
     logger.info({ to: opts.to, subject: opts.subject, provider: "smtp" }, "sending email via SMTP");
     await sendViaSmtp(opts);

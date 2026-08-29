@@ -277,7 +277,10 @@ router.post(
     const rendered = renderTemplate(config.template, ctx);
 
     // In dev mode, just return the rendered message without actually sending
-    const emailConfigured = !!process.env.SMTP_HOST || !!process.env.RESEND_API_KEY;
+    const emailConfigured =
+      !!process.env.SMTP_HOST ||
+      !!process.env.RESEND_API_KEY ||
+      (!!process.env.HOSTINGER_MAIL_API_TOKEN && !!process.env.HOSTINGER_MAILBOX_ID);
     const twilioConfigured = !!process.env.TWILIO_ACCOUNT_SID;
 
     res.json({
@@ -287,7 +290,7 @@ router.post(
       devMode: config.channel === "email" ? !emailConfigured : !twilioConfigured,
       note:
         config.channel === "email" && !emailConfigured
-          ? "Email not configured — set SMTP_HOST/… or RESEND_API_KEY to enable real email delivery."
+          ? "Email not configured — set SMTP_HOST/… or RESEND_API_KEY or HOSTINGER_MAIL_API_TOKEN+HOSTINGER_MAILBOX_ID to enable real email delivery."
           : config.channel === "whatsapp" && !twilioConfigured
           ? "Twilio not configured — set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM to enable WhatsApp delivery."
           : "Message sent successfully.",

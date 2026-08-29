@@ -38,9 +38,16 @@ services:
       - key: APP_BASE_URL
         sync: false
       # EMAIL PROVIDER — Render free tier BLOCKS outbound SMTP on ports 25/465/587,
-      # so prefer the Resend HTTP API (HTTPS/443) on free tier. Set RESEND_API_KEY in
-      # the dashboard; it overrides SMTP when present. For paid instances you can keep
-      # using SMTP (SMTP_HOST/PORT/USER/PASS) below instead.
+      # so use an HTTP (HTTPS/443) API on free tier instead. Preferred: Hostinger
+      # Mail API (you already have the mailbox). Fallbacks: Resend API, then SMTP.
+      # Hostinger Mail API (HTTPS/443) — set in the dashboard:
+      #   HOSTINGER_MAIL_API_TOKEN = token from hPanel → email domain → Agentic Mail → API access
+      #   HOSTINGER_MAILBOX_ID     = resource ID of the sending mailbox (e.g. info@camsclinic.org)
+      - key: HOSTINGER_MAIL_API_TOKEN
+        sync: false
+      - key: HOSTINGER_MAILBOX_ID
+        sync: false
+      # Resend HTTP API (HTTPS/443) — optional alternative, set key in dashboard
       - key: RESEND_API_KEY
         sync: false
       - key: RESEND_FROM

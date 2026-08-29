@@ -53,6 +53,8 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM: ${RESEND_FROM:-}
+      HOSTINGER_MAIL_API_TOKEN: ${HOSTINGER_MAIL_API_TOKEN:-}
+      HOSTINGER_MAILBOX_ID: ${HOSTINGER_MAILBOX_ID:-}
       FEEDBACK_EMAIL: ${FEEDBACK_EMAIL:-support@camsclinic.org}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
     ports:
