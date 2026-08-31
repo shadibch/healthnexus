@@ -1,6 +1,5 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { eq, and, desc } from "drizzle-orm";
-import { db } from "@workspace/db";
 import {
   appointmentReminderConfigsTable,
   appointmentReminderLogsTable,
@@ -10,6 +9,7 @@ import {
   medicalCentersTable,
 } from "@workspace/db";
 import { requireAuth, requireRole, getSessionUser } from "../lib/session";
+import { getDb } from "../lib/tenant";
 import {
   seedDefaultConfigs,
   renderTemplate,
@@ -35,8 +35,7 @@ router.get(
     // Auto-seed defaults on first access
     await seedDefaultConfigs(centerId);
 
-    const configs = await db
-      .select()
+    const configs = await getDb().select()
       .from(appointmentReminderConfigsTable)
       .where(eq(appointmentReminderConfigsTable.medicalCenterId, centerId))
       .orderBy(appointmentReminderConfigsTable.channel, appointmentReminderConfigsTable.offsetUnit, appointmentReminderConfigsTable.offsetValue);
@@ -76,8 +75,7 @@ router.post(
     const data = parsed.data;
     const label = data.label ?? `${data.offsetValue} ${data.offsetUnit} before`;
 
-    const [config] = await db
-      .insert(appointmentReminderConfigsTable)
+    const [config] = await getDb().insert(appointmentReminderConfigsTable)
       .values({ ...data, label, medicalCenterId: centerId })
       .returning();
 
@@ -114,8 +112,7 @@ router.patch(
     }
 
     const id = Number(req.params["id"]);
-    const [updated] = await db
-      .update(appointmentReminderConfigsTable)
+    const [updated] = await getDb().update(appointmentReminderConfigsTable)
       .set(parsed.data)
       .where(
         and(
@@ -147,8 +144,7 @@ router.delete(
     }
 
     const id = Number(req.params["id"]);
-    await db
-      .delete(appointmentReminderConfigsTable)
+    await getDb().delete(appointmentReminderConfigsTable)
       .where(
         and(
           eq(appointmentReminderConfigsTable.id, id),
@@ -179,8 +175,7 @@ router.get(
     const status  = req.query["status"]  as string | undefined;
 
     // Fetch logs scoped to this center's configs
-    const centerConfigs = await db
-      .select({ id: appointmentReminderConfigsTable.id })
+    const centerConfigs = await getDb().select({ id: appointmentReminderConfigsTable.id })
       .from(appointmentReminderConfigsTable)
       .where(eq(appointmentReminderConfigsTable.medicalCenterId, centerId));
 
@@ -195,8 +190,7 @@ router.get(
     if (channel) conditions.push(eq(appointmentReminderLogsTable.channel, channel));
     if (status)  conditions.push(eq(appointmentReminderLogsTable.status, status));
 
-    const logs = await db
-      .select()
+    const logs = await getDb().select()
       .from(appointmentReminderLogsTable)
       .where(and(...conditions))
       .orderBy(desc(appointmentReminderLogsTable.sentAt))
@@ -214,8 +208,7 @@ router.get(
   requireRole("admin", "doctor"),
   async (req, res): Promise<void> => {
     const appointmentId = Number(req.params["appointmentId"]);
-    const logs = await db
-      .select()
+    const logs = await getDb().select()
       .from(appointmentReminderLogsTable)
       .where(eq(appointmentReminderLogsTable.appointmentId, appointmentId))
       .orderBy(desc(appointmentReminderLogsTable.sentAt));
@@ -249,7 +242,7 @@ router.post(
       return;
     }
 
-    const config = await db.query.appointmentReminderConfigsTable.findFirst({
+    const config = await getDb().query.appointmentReminderConfigsTable.findFirst({
       where: and(
         eq(appointmentReminderConfigsTable.id, parsed.data.configId),
         eq(appointmentReminderConfigsTable.medicalCenterId, centerId),
@@ -261,7 +254,7 @@ router.post(
       return;
     }
 
-    const center = await db.query.medicalCentersTable.findFirst({
+    const center = await getDb().query.medicalCentersTable.findFirst({
       where: eq(medicalCentersTable.id, centerId),
     });
 

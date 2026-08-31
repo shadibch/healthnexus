@@ -1,14 +1,14 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { eq, asc } from "drizzle-orm";
-import { db, doctorCategoriesTable, doctorsTable } from "@workspace/db";
+import { doctorCategoriesTable, doctorsTable } from "@workspace/db";
 import { requireAuth, getSessionUser } from "../lib/session";
+import { getDb } from "../lib/tenant";
 
 const router: IRouter = Router();
 
 // ── GET /fee-schedule — all active categories (any authenticated user) ─────────
 router.get("/fee-schedule", requireAuth, async (_req, res): Promise<void> => {
-  const categories = await db
-    .select()
+  const categories = await getDb().select()
     .from(doctorCategoriesTable)
     .where(eq(doctorCategoriesTable.isActive, true))
     .orderBy(asc(doctorCategoriesTable.sortOrder), asc(doctorCategoriesTable.id));
@@ -43,8 +43,7 @@ router.post("/fee-schedule", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const [created] = await db
-    .insert(doctorCategoriesTable)
+  const [created] = await getDb().insert(doctorCategoriesTable)
     .values({
       name: String(name).trim(),
       description: description ? String(description).trim() : null,
@@ -97,8 +96,7 @@ router.patch("/fee-schedule/:id", requireAuth, async (req, res): Promise<void> =
     return;
   }
 
-  const [updated] = await db
-    .update(doctorCategoriesTable)
+  const [updated] = await getDb().update(doctorCategoriesTable)
     .set(updateData as any)
     .where(eq(doctorCategoriesTable.id, id))
     .returning();
@@ -122,8 +120,7 @@ router.delete("/fee-schedule/:id", requireAuth, async (req, res): Promise<void> 
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   // Check if any doctors are still using this category
-  const usingDoctors = await db
-    .select({ id: doctorsTable.id })
+  const usingDoctors = await getDb().select({ id: doctorsTable.id })
     .from(doctorsTable)
     .where(eq(doctorsTable.categoryId, id))
     .limit(1);
@@ -135,8 +132,7 @@ router.delete("/fee-schedule/:id", requireAuth, async (req, res): Promise<void> 
     return;
   }
 
-  const [deactivated] = await db
-    .update(doctorCategoriesTable)
+  const [deactivated] = await getDb().update(doctorCategoriesTable)
     .set({ isActive: false })
     .where(eq(doctorCategoriesTable.id, id))
     .returning();
@@ -163,15 +159,13 @@ router.patch("/doctors/:id/category", requireAuth, async (req, res): Promise<voi
 
   // Validate category exists if provided
   if (categoryId != null) {
-    const [cat] = await db
-      .select()
+    const [cat] = await getDb().select()
       .from(doctorCategoriesTable)
       .where(eq(doctorCategoriesTable.id, categoryId));
     if (!cat) { res.status(404).json({ error: "Category not found" }); return; }
   }
 
-  const [updated] = await db
-    .update(doctorsTable)
+  const [updated] = await getDb().update(doctorsTable)
     .set({ categoryId: categoryId ?? null })
     .where(eq(doctorsTable.id, doctorId))
     .returning();
@@ -217,8 +211,7 @@ router.patch("/consultations/:id/fee-override", requireAuth, async (req, res): P
   const { consultationsTable } = await import("@workspace/db");
   const { eq: eqOp } = await import("drizzle-orm");
 
-  const [updated] = await db
-    .update(consultationsTable)
+  const [updated] = await getDb().update(consultationsTable)
     .set({
       consultationFeeApplied: fee.toFixed(2),
       feeOverrideReason: String(reason).trim(),

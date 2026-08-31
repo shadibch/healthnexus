@@ -2,7 +2,6 @@ import type { Request, Response, NextFunction } from "express";
 import { db } from "@workspace/db";
 import { usersTable, doctorsTable, patientsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-
 export type AppRole =
   | "admin"
   | "doctor"
@@ -66,7 +65,13 @@ export async function destroySession(req: Request): Promise<void> {
   });
 }
 
-/** Build the SessionUser for a user id (or null if missing/deactivated) */
+/** Build the SessionUser for a user id (or null if missing/deactivated).
+ *
+ * Resolves global account fields only (users table in `public`). The tenant
+ * fields (`doctorDbId` / `patientDbId`) live in per-clinic schemas and are
+ * filled in by `attachTenantIds` once the request's search_path is set to the
+ * correct clinic schema (see lib/tenant.ts).
+ */
 export async function resolveSessionUser(userId: number): Promise<SessionUser | null> {
   const user = await db.query.usersTable.findFirst({
     where: eq(usersTable.id, userId),
@@ -81,23 +86,6 @@ export async function resolveSessionUser(userId: number): Promise<SessionUser | 
 
   const computedPrimary = primaryRole(dbRoles);
 
-  let doctorDbId: number | null = null;
-  let patientDbId: number | null = null;
-
-  if (dbRoles.includes("doctor")) {
-    const doctor = await db.query.doctorsTable.findFirst({
-      where: eq(doctorsTable.userId, user.id),
-    });
-    doctorDbId = doctor?.id ?? null;
-  }
-
-  if (dbRoles.includes("patient")) {
-    const patient = await db.query.patientsTable.findFirst({
-      where: eq(patientsTable.userId, user.id),
-    });
-    patientDbId = patient?.id ?? null;
-  }
-
   return {
     userId: user.id,
     role: computedPrimary,
@@ -106,14 +94,44 @@ export async function resolveSessionUser(userId: number): Promise<SessionUser | 
     email: user.email,
     onboardingComplete: user.onboardingComplete,
     medicalCenterId: user.medicalCenterId ?? null,
-    doctorDbId,
-    patientDbId,
+    doctorDbId: null,
+    patientDbId: null,
     aiAssistantEnabled: user.aiAssistantEnabled,
     subscriptionPlan: user.subscriptionPlan,
     emailVerified: user.emailVerified,
     mustChangePassword: user.mustChangePassword,
     deactivated: user.deactivated,
   };
+}
+
+/**
+ * Resolve a user's doctor/patient DB ids from the CURRENT tenant (clinic)
+ * schema. Must be called while a tenant search_path is active.
+ */
+export async function attachTenantIds(
+  user: SessionUser,
+  tenantDb: any,
+): Promise<SessionUser> {
+  if (!user) return user;
+
+  let doctorDbId: number | null = null;
+  let patientDbId: number | null = null;
+
+  if (user.roles.includes("doctor")) {
+    const doctor = await tenantDb.query.doctorsTable.findFirst({
+      where: eq(doctorsTable.userId, user.userId),
+    });
+    doctorDbId = doctor?.id ?? null;
+  }
+
+  if (user.roles.includes("patient")) {
+    const patient = await tenantDb.query.patientsTable.findFirst({
+      where: eq(patientsTable.userId, user.userId),
+    });
+    patientDbId = patient?.id ?? null;
+  }
+
+  return { ...user, doctorDbId, patientDbId };
 }
 
 export async function attachSessionUser(

@@ -8,6 +8,7 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { attachSessionUser } from "./lib/session";
+import { tenantMiddleware } from "./lib/tenant";
 
 const app: Express = express();
 
@@ -51,6 +52,7 @@ app.use(
 );
 
 app.use("/api", attachSessionUser);
+app.use("/api", tenantMiddleware);
 app.use("/api", router);
 
 // Serve the compiled client (SPA) when a build is present

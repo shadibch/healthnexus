@@ -1,6 +1,6 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { eq, ilike, or, desc } from "drizzle-orm";
-import { db, patientsTable, appointmentsTable, consultationsTable, prescriptionsTable, prescriptionItemsTable, medicationsTable, doctorsTable, medicalOrdersTable } from "@workspace/db";
+import { patientsTable, appointmentsTable, consultationsTable, prescriptionsTable, prescriptionItemsTable, medicationsTable, doctorsTable, medicalOrdersTable } from "@workspace/db";
 import {
   ListPatientsQueryParams,
   CreatePatientBody,
@@ -11,6 +11,7 @@ import {
   GetPatientHistoryParams,
 } from "@workspace/api-zod";
 import { requireAuth, getSessionUser } from "../lib/session";
+import { getDb } from "../lib/tenant";
 
 const router: IRouter = Router();
 
@@ -20,7 +21,7 @@ router.get("/patients", requireAuth, async (req, res): Promise<void> => {
   // Patients can only see their own record
   if (session.roles.includes("patient")) {
     if (!session.patientDbId) { res.status(403).json({ error: "No patient record" }); return; }
-    const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, session.patientDbId));
+    const [patient] = await getDb().select().from(patientsTable).where(eq(patientsTable.id, session.patientDbId));
     res.json(patient ? [patient] : []);
     return;
   }
@@ -41,8 +42,7 @@ router.get("/patients", requireAuth, async (req, res): Promise<void> => {
 
   let patients;
   if (search) {
-    patients = await db
-      .select()
+    patients = await getDb().select()
       .from(patientsTable)
       .where(
         or(
@@ -55,7 +55,7 @@ router.get("/patients", requireAuth, async (req, res): Promise<void> => {
       .limit(limit)
       .offset(offset);
   } else {
-    patients = await db.select().from(patientsTable).limit(limit).offset(offset);
+    patients = await getDb().select().from(patientsTable).limit(limit).offset(offset);
   }
   res.json(patients);
 });
@@ -71,7 +71,7 @@ router.post("/patients", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [patient] = await db.insert(patientsTable).values(parsed.data).returning();
+  const [patient] = await getDb().insert(patientsTable).values(parsed.data).returning();
   res.status(201).json(patient);
 });
 
@@ -87,7 +87,7 @@ router.get("/patients/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(403).json({ error: "Not your record" });
     return;
   }
-  const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, params.data.id));
+  const [patient] = await getDb().select().from(patientsTable).where(eq(patientsTable.id, params.data.id));
   if (!patient) {
     res.status(404).json({ error: "Patient not found" });
     return;
@@ -117,7 +117,7 @@ router.patch("/patients/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [existing] = await db.select().from(patientsTable).where(eq(patientsTable.id, params.data.id));
+  const [existing] = await getDb().select().from(patientsTable).where(eq(patientsTable.id, params.data.id));
   if (!existing) {
     res.status(404).json({ error: "Patient not found" });
     return;
@@ -127,8 +127,7 @@ router.patch("/patients/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const [patient] = await db
-    .update(patientsTable)
+  const [patient] = await getDb().update(patientsTable)
     .set(parsed.data)
     .where(eq(patientsTable.id, params.data.id))
     .returning();
@@ -151,7 +150,7 @@ router.delete("/patients/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [existing] = await db.select().from(patientsTable).where(eq(patientsTable.id, params.data.id));
+  const [existing] = await getDb().select().from(patientsTable).where(eq(patientsTable.id, params.data.id));
   if (!existing) {
     res.status(404).json({ error: "Patient not found" });
     return;
@@ -161,7 +160,7 @@ router.delete("/patients/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const [patient] = await db.delete(patientsTable).where(eq(patientsTable.id, params.data.id)).returning();
+  const [patient] = await getDb().delete(patientsTable).where(eq(patientsTable.id, params.data.id)).returning();
   if (!patient) {
     res.status(404).json({ error: "Patient not found" });
     return;
@@ -184,7 +183,7 @@ router.get("/patients/:id/history", requireAuth, async (req, res): Promise<void>
     return;
   }
 
-  const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, patientId));
+  const [patient] = await getDb().select().from(patientsTable).where(eq(patientsTable.id, patientId));
   if (!patient) {
     res.status(404).json({ error: "Patient not found" });
     return;
@@ -195,20 +194,19 @@ router.get("/patients/:id/history", requireAuth, async (req, res): Promise<void>
     return;
   }
 
-  const doctors = await db.select().from(doctorsTable);
+  const doctors = await getDb().select().from(doctorsTable);
   const doctorMap = new Map(doctors.map((d) => [d.id, `Dr. ${d.firstName} ${d.lastName}`]));
 
   const [appointments, consultations, prescriptionsRaw] = await Promise.all([
-    db.select().from(appointmentsTable).where(eq(appointmentsTable.patientId, patientId)).orderBy(appointmentsTable.scheduledAt),
-    db.select().from(consultationsTable).where(eq(consultationsTable.patientId, patientId)).orderBy(consultationsTable.createdAt),
-    db.select().from(prescriptionsTable).where(eq(prescriptionsTable.patientId, patientId)).orderBy(prescriptionsTable.issuedAt),
+    getDb().select().from(appointmentsTable).where(eq(appointmentsTable.patientId, patientId)).orderBy(appointmentsTable.scheduledAt),
+    getDb().select().from(consultationsTable).where(eq(consultationsTable.patientId, patientId)).orderBy(consultationsTable.createdAt),
+    getDb().select().from(prescriptionsTable).where(eq(prescriptionsTable.patientId, patientId)).orderBy(prescriptionsTable.issuedAt),
   ]);
 
   const prescriptionIds = prescriptionsRaw.map((p) => p.id);
   let allItems: any[] = [];
   if (prescriptionIds.length > 0) {
-    const items = await db
-      .select({
+    const items = await getDb().select({
         id: prescriptionItemsTable.id,
         prescriptionId: prescriptionItemsTable.prescriptionId,
         medicationId: prescriptionItemsTable.medicationId,
@@ -260,11 +258,10 @@ router.get("/patients/:id/encounters", requireAuth, async (req, res): Promise<vo
     return;
   }
 
-  const doctors = await db.select().from(doctorsTable);
+  const doctors = await getDb().select().from(doctorsTable);
   const doctorMap = new Map(doctors.map((d) => [d.id, `Dr. ${d.firstName} ${d.lastName}`]));
 
-  const encounters = await db
-    .select()
+  const encounters = await getDb().select()
     .from(consultationsTable)
     .where(eq(consultationsTable.patientId, patientId))
     .orderBy(desc(consultationsTable.createdAt))
@@ -273,8 +270,7 @@ router.get("/patients/:id/encounters", requireAuth, async (req, res): Promise<vo
   // Fetch orders for each encounter
   const encountersWithOrders = await Promise.all(
     encounters.map(async (enc) => {
-      const orders = await db
-        .select()
+      const orders = await getDb().select()
         .from(medicalOrdersTable)
         .where(eq(medicalOrdersTable.consultationId, enc.id))
         .orderBy(medicalOrdersTable.orderedAt);

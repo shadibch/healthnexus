@@ -1,7 +1,8 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { eq, desc } from "drizzle-orm";
-import { db, consultationsTable, patientsTable, doctorsTable, encounterActivitiesTable, doctorCategoriesTable } from "@workspace/db";
+import { consultationsTable, patientsTable, doctorsTable, encounterActivitiesTable, doctorCategoriesTable } from "@workspace/db";
 import { requireAuth, getSessionUser } from "../lib/session";
+import { getDb } from "../lib/tenant";
 
 const router: IRouter = Router();
 
@@ -17,11 +18,11 @@ router.get("/billing/claims", requireAuth, async (req, res): Promise<void> => {
   const toRaw = req.query.to as string | undefined;
   const statusFilter = (req.query.status as string) ?? "partial";
 
-  const patients = await db.select().from(patientsTable);
+  const patients = await getDb().select().from(patientsTable);
   const patientMap = new Map(patients.map((p) => [p.id, p]));
 
-  const doctors = await db.select().from(doctorsTable);
-  const categories = await db.select().from(doctorCategoriesTable);
+  const doctors = await getDb().select().from(doctorsTable);
+  const categories = await getDb().select().from(doctorCategoriesTable);
   const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
   const doctorMap = new Map(
     doctors.map((d) => [
@@ -33,8 +34,7 @@ router.get("/billing/claims", requireAuth, async (req, res): Promise<void> => {
     ])
   );
 
-  let consultations = await db
-    .select()
+  let consultations = await getDb().select()
     .from(consultationsTable)
     .where(eq(consultationsTable.paymentStatus, statusFilter))
     .orderBy(desc(consultationsTable.createdAt));
@@ -54,8 +54,7 @@ router.get("/billing/claims", requireAuth, async (req, res): Promise<void> => {
 
   const enriched = await Promise.all(
     consultations.map(async (c) => {
-      const activities = await db
-        .select()
+      const activities = await getDb().select()
         .from(encounterActivitiesTable)
         .where(eq(encounterActivitiesTable.consultationId, c.id));
 
@@ -114,8 +113,7 @@ router.patch("/consultations/:id/payment", requireAuth, async (req, res): Promis
   if (insuranceCompany !== undefined) updateData.insuranceCompany = insuranceCompany;
   if (insuranceAmount !== undefined) updateData.insuranceAmount = insuranceAmount;
 
-  const [updated] = await db
-    .update(consultationsTable)
+  const [updated] = await getDb().update(consultationsTable)
     .set(updateData as any)
     .where(eq(consultationsTable.id, id))
     .returning();

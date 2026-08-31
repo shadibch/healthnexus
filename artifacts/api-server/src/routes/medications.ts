@@ -1,6 +1,6 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { eq, ilike } from "drizzle-orm";
-import { db, medicationsTable } from "@workspace/db";
+import { medicationsTable } from "@workspace/db";
 import {
   ListMedicationsQueryParams,
   CreateMedicationBody,
@@ -8,6 +8,7 @@ import {
   UpdateMedicationParams,
   UpdateMedicationBody,
 } from "@workspace/api-zod";
+import { getDb } from "../lib/tenant";
 
 const router: IRouter = Router();
 
@@ -19,7 +20,7 @@ router.get("/medications", async (req, res): Promise<void> => {
   }
   const { search, category } = parsed.data;
 
-  let all = await db.select().from(medicationsTable);
+  let all = await getDb().select().from(medicationsTable);
   if (search) {
     const s = search.toLowerCase();
     all = all.filter(
@@ -40,7 +41,7 @@ router.post("/medications", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [medication] = await db.insert(medicationsTable).values(parsed.data).returning();
+  const [medication] = await getDb().insert(medicationsTable).values(parsed.data).returning();
   res.status(201).json(medication);
 });
 
@@ -50,7 +51,7 @@ router.get("/medications/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [medication] = await db.select().from(medicationsTable).where(eq(medicationsTable.id, params.data.id));
+  const [medication] = await getDb().select().from(medicationsTable).where(eq(medicationsTable.id, params.data.id));
   if (!medication) {
     res.status(404).json({ error: "Medication not found" });
     return;
@@ -69,8 +70,7 @@ router.patch("/medications/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [medication] = await db
-    .update(medicationsTable)
+  const [medication] = await getDb().update(medicationsTable)
     .set(parsed.data)
     .where(eq(medicationsTable.id, params.data.id))
     .returning();

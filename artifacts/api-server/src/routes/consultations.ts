@@ -1,6 +1,6 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { eq, desc, lt, and } from "drizzle-orm";
-import { db, consultationsTable, patientsTable, doctorsTable, medicalOrdersTable, doctorCategoriesTable } from "@workspace/db";
+import { consultationsTable, patientsTable, doctorsTable, medicalOrdersTable, doctorCategoriesTable } from "@workspace/db";
 import {
   ListConsultationsQueryParams,
   CreateConsultationBody,
@@ -9,6 +9,7 @@ import {
   UpdateConsultationBody,
 } from "@workspace/api-zod";
 import { requireAuth, getSessionUser } from "../lib/session";
+import { getDb } from "../lib/tenant";
 
 // Server-side schema: omit doctorId — always set from session, never from body
 const CreateConsultationServerBody = CreateConsultationBody.omit({ doctorId: true });
@@ -16,9 +17,9 @@ const CreateConsultationServerBody = CreateConsultationBody.omit({ doctorId: tru
 const router: IRouter = Router();
 
 async function getMaps() {
-  const patients = await db.select().from(patientsTable);
+  const patients = await getDb().select().from(patientsTable);
   const patientMap = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
-  const doctors = await db.select().from(doctorsTable);
+  const doctors = await getDb().select().from(doctorsTable);
   const doctorMap = new Map(doctors.map((d) => [d.id, `Dr. ${d.firstName} ${d.lastName}`]));
   return { patientMap, doctorMap };
 }
@@ -30,16 +31,14 @@ async function getMaps() {
 async function resolveDoctorFee(
   doctorId: number
 ): Promise<{ fee: string | null; categoryName: string | null }> {
-  const [doctor] = await db
-    .select()
+  const [doctor] = await getDb().select()
     .from(doctorsTable)
     .where(eq(doctorsTable.id, doctorId));
 
   if (!doctor) return { fee: null, categoryName: null };
 
   if (doctor.categoryId != null) {
-    const [category] = await db
-      .select()
+    const [category] = await getDb().select()
       .from(doctorCategoriesTable)
       .where(eq(doctorCategoriesTable.id, doctor.categoryId));
     if (category) {
@@ -59,7 +58,7 @@ router.get("/consultations", requireAuth, async (req, res): Promise<void> => {
   }
 
   const { patientMap, doctorMap } = await getMaps();
-  let all = await db.select().from(consultationsTable).orderBy(desc(consultationsTable.createdAt));
+  let all = await getDb().select().from(consultationsTable).orderBy(desc(consultationsTable.createdAt));
 
   // Role-based isolation
   if (session.roles.includes("doctor") && session.doctorDbId != null) {
@@ -110,16 +109,14 @@ router.post("/consultations", requireAuth, async (req, res): Promise<void> => {
 
   // Prevent duplicate encounter for the same appointment
   if (appointmentId) {
-    const existing = await db
-      .select()
+    const existing = await getDb().select()
       .from(consultationsTable)
       .where(eq(consultationsTable.appointmentId, appointmentId))
       .limit(1);
     if (existing.length > 0) {
       const { patientMap, doctorMap } = await getMaps();
       const enc = existing[0];
-      const orders = await db
-        .select()
+      const orders = await getDb().select()
         .from(medicalOrdersTable)
         .where(eq(medicalOrdersTable.consultationId, enc.id))
         .orderBy(medicalOrdersTable.orderedAt);
@@ -136,8 +133,7 @@ router.post("/consultations", requireAuth, async (req, res): Promise<void> => {
 
   // 7-day follow-up detection
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const recentConsultations = await db
-    .select()
+  const recentConsultations = await getDb().select()
     .from(consultationsTable)
     .where(
       and(
@@ -159,8 +155,7 @@ router.post("/consultations", requireAuth, async (req, res): Promise<void> => {
   // Auto-apply consultation fee from doctor's category (or legacy fee)
   const { fee, categoryName } = await resolveDoctorFee(doctorId);
 
-  const [consultation] = await db
-    .insert(consultationsTable)
+  const [consultation] = await getDb().insert(consultationsTable)
     .values({
       ...data,
       doctorId,
@@ -187,8 +182,7 @@ router.get("/consultations/:id", requireAuth, async (req, res): Promise<void> =>
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [consultation] = await db
-    .select()
+  const [consultation] = await getDb().select()
     .from(consultationsTable)
     .where(eq(consultationsTable.id, params.data.id));
   if (!consultation) {
@@ -203,8 +197,7 @@ router.get("/consultations/:id", requireAuth, async (req, res): Promise<void> =>
 
   const { patientMap, doctorMap } = await getMaps();
 
-  const orders = await db
-    .select()
+  const orders = await getDb().select()
     .from(medicalOrdersTable)
     .where(eq(medicalOrdersTable.consultationId, consultation.id))
     .orderBy(medicalOrdersTable.orderedAt);
@@ -235,8 +228,7 @@ router.patch("/consultations/:id", requireAuth, async (req, res): Promise<void> 
     return;
   }
 
-  const [consultation] = await db
-    .update(consultationsTable)
+  const [consultation] = await getDb().update(consultationsTable)
     .set(parsed.data)
     .where(eq(consultationsTable.id, params.data.id))
     .returning();
@@ -256,8 +248,7 @@ router.patch("/consultations/:id", requireAuth, async (req, res): Promise<void> 
 router.get("/consultations/:id/orders", requireAuth, async (req, res): Promise<void> => {
   const idNum = parseInt(String(req.params.id));
   if (isNaN(idNum)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const orders = await db
-    .select()
+  const orders = await getDb().select()
     .from(medicalOrdersTable)
     .where(eq(medicalOrdersTable.consultationId, idNum))
     .orderBy(medicalOrdersTable.orderedAt);
@@ -274,8 +265,7 @@ router.post("/consultations/:id/orders", requireAuth, async (req, res): Promise<
   const idNum = parseInt(String(req.params.id));
   if (isNaN(idNum)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const [consultation] = await db
-    .select()
+  const [consultation] = await getDb().select()
     .from(consultationsTable)
     .where(eq(consultationsTable.id, idNum));
   if (!consultation) { res.status(404).json({ error: "Consultation not found" }); return; }
@@ -288,7 +278,7 @@ router.post("/consultations/:id/orders", requireAuth, async (req, res): Promise<
     return;
   }
 
-  const [order] = await db.insert(medicalOrdersTable).values({
+  const [order] = await getDb().insert(medicalOrdersTable).values({
     consultationId: idNum,
     patientId: consultation.patientId,
     doctorId: consultation.doctorId,

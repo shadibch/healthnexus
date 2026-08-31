@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import { requireAuth, requireRole, getSessionUser } from "../lib/session";
 import { openai } from "../lib/openai";
-import { db, consultationsTable, patientsTable, medicationsTable, prescriptionItemsTable, prescriptionsTable } from "@workspace/db";
+import { consultationsTable, patientsTable, medicationsTable, prescriptionItemsTable, prescriptionsTable } from "@workspace/db";
+import { getDb } from "../lib/tenant";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 

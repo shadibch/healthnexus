@@ -1,7 +1,8 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, clinicSettingsTable } from "@workspace/db";
+import { clinicSettingsTable } from "@workspace/db";
 import { requireAuth, requireRole } from "../lib/session";
+import { getDb } from "../lib/tenant";
 
 const router: IRouter = Router();
 
@@ -37,7 +38,7 @@ const EMPTY_DEFAULTS = {
 // ── GET /settings — public, no auth required (login page needs it too) ────────
 router.get("/settings", async (req, res): Promise<void> => {
   try {
-    const [s] = await db.select().from(clinicSettingsTable).limit(1);
+    const [s] = await getDb().select().from(clinicSettingsTable).limit(1);
     res.json(s ? rowToJson(s) : EMPTY_DEFAULTS);
   } catch {
     res.json(EMPTY_DEFAULTS);
@@ -112,7 +113,7 @@ router.patch(
       return;
     }
 
-    const [existing] = await db.select().from(clinicSettingsTable).limit(1);
+    const [existing] = await getDb().select().from(clinicSettingsTable).limit(1);
 
     const toSet = {
       ...(clinicName  !== undefined ? { clinicName: clinicName.trim() } : {}),
@@ -126,15 +127,13 @@ router.patch(
     };
 
     if (existing) {
-      const [updated] = await db
-        .update(clinicSettingsTable)
+      const [updated] = await getDb().update(clinicSettingsTable)
         .set(toSet)
         .where(eq(clinicSettingsTable.id, existing.id))
         .returning();
       res.json(rowToJson(updated));
     } else {
-      const [inserted] = await db
-        .insert(clinicSettingsTable)
+      const [inserted] = await getDb().insert(clinicSettingsTable)
         .values({
           clinicName: clinicName?.trim() ?? DEFAULT_CLINIC_NAME,
           logoBase64: logoBase64 ?? null,

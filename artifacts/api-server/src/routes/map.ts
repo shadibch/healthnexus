@@ -1,7 +1,8 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { sql, eq, inArray } from "drizzle-orm";
-import { db, prescriptionsTable, prescriptionItemsTable } from "@workspace/db";
+import { prescriptionsTable, prescriptionItemsTable } from "@workspace/db";
 import { requireAuth, getSessionUser } from "../lib/session";
+import { getDb } from "../lib/tenant";
 
 const router: IRouter = Router();
 
@@ -22,7 +23,7 @@ router.get("/map/doctors", requireAuth, async (req, res): Promise<void> => {
   const { lat, lng } = parseLoc(req);
   const limit = Math.min(parseInt(req.query.limit as string) || 10, 20);
 
-  const result = await db.execute(sql`
+  const result = await getDb().execute(sql`
     SELECT
       id, first_name, last_name, specialization, phone, email,
       is_available, CAST(consultation_fee AS FLOAT) AS consultation_fee,
@@ -50,7 +51,7 @@ router.get("/map/pharmacies", requireAuth, async (req, res): Promise<void> => {
   const { lat, lng } = parseLoc(req);
   const limit = Math.min(parseInt(req.query.limit as string) || 20, 30);
 
-  const result = await db.execute(sql`
+  const result = await getDb().execute(sql`
     SELECT
       id, name, address, phone, is_open_24h,
       CAST(latitude AS FLOAT) AS latitude,
@@ -91,7 +92,7 @@ router.get("/map/pharmacies/check-meds", requireAuth, async (req, res): Promise<
   // Use sql array literal
   const idsArray = `{${medIds.join(",")}}`;
 
-  const result = await db.execute(sql`
+  const result = await getDb().execute(sql`
     SELECT
       ph.id,
       ph.name,
@@ -146,8 +147,7 @@ router.get("/map/prescription/:id/pharmacies", requireAuth, async (req, res): Pr
   if (isNaN(prescriptionId)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   // Fetch prescription to verify ownership
-  const [prescription] = await db
-    .select()
+  const [prescription] = await getDb().select()
     .from(prescriptionsTable)
     .where(eq(prescriptionsTable.id, prescriptionId));
 
@@ -160,8 +160,7 @@ router.get("/map/prescription/:id/pharmacies", requireAuth, async (req, res): Pr
   }
 
   // Get prescription items
-  const items = await db
-    .select()
+  const items = await getDb().select()
     .from(prescriptionItemsTable)
     .where(eq(prescriptionItemsTable.prescriptionId, prescriptionId));
 
@@ -175,7 +174,7 @@ router.get("/map/prescription/:id/pharmacies", requireAuth, async (req, res): Pr
   const totalRequested = medIds.length;
   const idsArray = `{${medIds.join(",")}}`;
 
-  const result = await db.execute(sql`
+  const result = await getDb().execute(sql`
     SELECT
       ph.id, ph.name, ph.address, ph.phone, ph.is_open_24h,
       CAST(ph.latitude AS FLOAT) AS latitude,

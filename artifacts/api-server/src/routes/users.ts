@@ -1,8 +1,11 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, usersTable, medicalCentersTable, staffInvitesTable, doctorsTable, patientsTable } from "@workspace/db";
+import { pool, usersTable, medicalCentersTable, staffInvitesTable, doctorsTable, patientsTable } from "@workspace/db";
 import { requireAuth, getSessionUser, primaryRole } from "../lib/session";
 import { hashPassword, verifyPassword } from "../lib/password";
+import { getDb } from "../lib/tenant";
+import { ensureTenantSchema, tenantSchemaName } from "../lib/tenant-schema";
+import { logger } from "../lib/logger";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -70,7 +73,7 @@ router.post("/users/onboarding/role", requireAuth, async (req, res): Promise<voi
   }
 
   const primary = primaryRole(roles);
-  await db.update(usersTable)
+  await getDb().update(usersTable)
     .set({ role: primary, roles })
     .where(eq(usersTable.id, session.userId));
 
@@ -92,18 +95,54 @@ router.post("/users/onboarding/admin", requireAuth, async (req, res): Promise<vo
   }
 
   const { centerName, address, latitude, longitude, adminName, specialization } = parsed.data;
-  const [center] = await db.insert(medicalCentersTable).values({
-    name: centerName,
-    address: address ?? null,
-    latitude: latitude ?? null,
-    longitude: longitude ?? null,
-    adminUserId: session.userId,
-  }).returning();
 
-  const userUpdates: Record<string, unknown> = { medicalCenterId: center.id, onboardingComplete: true };
+  // ── Create the clinic and its dedicated tenant schema (schema-per-clinic) ──
+  // Schema name is deterministic from the center id: tenant_clinic_id_<id>.
+  const client = await pool.connect();
+  let centerId: number;
+  let schemaName: string;
+  try {
+    await client.query("BEGIN");
+
+    const [center] = await getDb().insert(medicalCentersTable).values({
+      name: centerName,
+      address: address ?? null,
+      latitude: latitude ?? null,
+      longitude: longitude ?? null,
+      adminUserId: session.userId,
+    }).returning();
+
+    centerId = center.id;
+    schemaName = tenantSchemaName(centerId);
+
+    // Clone the clinic-scoped working tables into the new schema.
+    await ensureTenantSchema(client, centerId);
+
+    // Persist the schema name on the registry row.
+    await getDb().update(medicalCentersTable)
+      .set({ schemaName })
+      .where(eq(medicalCentersTable.id, centerId));
+
+    await client.query("COMMIT");
+
+    logger.info({ centerId, schemaName }, "created clinic tenant schema");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    client.release();
+    logger.error({ err }, "failed to create clinic tenant schema");
+    res.status(500).json({ error: "Failed to create clinic. Please try again." });
+    return;
+  }
+  client.release();
+
+  const userUpdates: Record<string, unknown> = { medicalCenterId: centerId, onboardingComplete: true };
   if (adminName?.trim()) userUpdates.name = adminName.trim();
 
-  await db.update(usersTable).set(userUpdates as any).where(eq(usersTable.id, session.userId));
+  await getDb().update(usersTable).set(userUpdates as any).where(eq(usersTable.id, session.userId));
+
+  const center = await getDb().query.medicalCentersTable.findFirst({
+    where: eq(medicalCentersTable.id, centerId),
+  });
 
   // If the admin is also a doctor, create a doctor record
   let doctor = null;
@@ -112,13 +151,13 @@ router.post("/users/onboarding/admin", requireAuth, async (req, res): Promise<vo
     const nameParts = displayName.split(" ");
     const firstName = nameParts[0] ?? session.email;
     const lastName = nameParts.slice(1).join(" ") || "-";
-    [doctor] = await db.insert(doctorsTable).values({
+    [doctor] = await getDb().insert(doctorsTable).values({
       userId: session.userId,
       firstName,
       lastName,
       specialization: specialization?.trim() || "General Practitioner",
       email: session.email,
-      medicalCenterId: center.id,
+      medicalCenterId: centerId,
     }).returning();
   }
 
@@ -140,7 +179,7 @@ router.post("/users/onboarding/patient", requireAuth, async (req, res): Promise<
   }
 
   const data = parsed.data;
-  const [patient] = await db.insert(patientsTable).values({
+  const [patient] = await getDb().insert(patientsTable).values({
     userId: session.userId,
     firstName: data.firstName,
     lastName: data.lastName,
@@ -153,7 +192,7 @@ router.post("/users/onboarding/patient", requireAuth, async (req, res): Promise<
     currentMedications: data.currentMedications ?? null,
   }).returning();
 
-  await db.update(usersTable).set({ onboardingComplete: true }).where(eq(usersTable.id, session.userId));
+  await getDb().update(usersTable).set({ onboardingComplete: true }).where(eq(usersTable.id, session.userId));
   res.json({ ok: true, patient });
 });
 
@@ -184,7 +223,7 @@ router.post("/users/create-staff", requireAuth, async (req, res): Promise<void> 
   const firstName = nameParts[0] ?? name;
   const lastName = nameParts.slice(1).join(" ") || "-";
 
-  const existing = await db.query.usersTable.findFirst({
+  const existing = await getDb().query.usersTable.findFirst({
     where: eq(usersTable.email, email.toLowerCase()),
   });
   if (existing) {
@@ -194,7 +233,7 @@ router.post("/users/create-staff", requireAuth, async (req, res): Promise<void> 
 
   let dbUser;
   try {
-    [dbUser] = await db.insert(usersTable).values({
+    [dbUser] = await getDb().insert(usersTable).values({
       email: email.toLowerCase(),
       name: name.trim(),
       passwordHash: await hashPassword(tempPassword),
@@ -211,7 +250,7 @@ router.post("/users/create-staff", requireAuth, async (req, res): Promise<void> 
 
   if (role === "doctor") {
     try {
-      await db.insert(doctorsTable).values({
+      await getDb().insert(doctorsTable).values({
         userId: dbUser.id,
         firstName,
         lastName,
@@ -248,7 +287,7 @@ router.post("/users/invite-staff", requireAuth, async (req, res): Promise<void> 
 
   const { email, role } = parsed.data;
 
-  const [invite] = await db.insert(staffInvitesTable).values({
+  const [invite] = await getDb().insert(staffInvitesTable).values({
     email: email.toLowerCase(),
     role,
     medicalCenterId: session.medicalCenterId,
@@ -262,7 +301,7 @@ router.post("/users/invite-staff", requireAuth, async (req, res): Promise<void> 
 // ── POST /users/mark-password-changed ─────────────────────────────────────────
 router.post("/users/mark-password-changed", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  await db.update(usersTable)
+  await getDb().update(usersTable)
     .set({ mustChangePassword: false })
     .where(eq(usersTable.id, session.userId));
   res.json({ ok: true });
@@ -282,7 +321,7 @@ router.post("/users/change-password", requireAuth, async (req, res): Promise<voi
     return;
   }
 
-  const user = await db.query.usersTable.findFirst({ where: eq(usersTable.id, session.userId) });
+  const user = await getDb().query.usersTable.findFirst({ where: eq(usersTable.id, session.userId) });
   if (!user) {
     res.status(404).json({ error: "User not found" });
     return;
@@ -298,7 +337,7 @@ router.post("/users/change-password", requireAuth, async (req, res): Promise<voi
     return;
   }
 
-  await db.update(usersTable)
+  await getDb().update(usersTable)
     .set({ passwordHash: await hashPassword(parsed.data.newPassword) })
     .where(eq(usersTable.id, session.userId));
 
@@ -313,8 +352,8 @@ router.get("/users/staff", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const staff = await db.select().from(usersTable).where(eq(usersTable.medicalCenterId, session.medicalCenterId));
-  const invites = await db.select().from(staffInvitesTable).where(eq(staffInvitesTable.medicalCenterId, session.medicalCenterId));
+  const staff = await getDb().select().from(usersTable).where(eq(usersTable.medicalCenterId, session.medicalCenterId));
+  const invites = await getDb().select().from(staffInvitesTable).where(eq(staffInvitesTable.medicalCenterId, session.medicalCenterId));
   res.json({ staff, invites });
 });
 
@@ -345,23 +384,23 @@ router.patch("/users/:id/roles", requireAuth, async (req, res): Promise<void> =>
     return;
   }
 
-  const target = await db.query.usersTable.findFirst({ where: eq(usersTable.id, targetId) });
+  const target = await getDb().query.usersTable.findFirst({ where: eq(usersTable.id, targetId) });
   if (!target || target.medicalCenterId !== session.medicalCenterId) {
     res.status(404).json({ error: "User not found" });
     return;
   }
 
   const primary = primaryRole(roles);
-  await db.update(usersTable).set({ role: primary, roles }).where(eq(usersTable.id, targetId));
+  await getDb().update(usersTable).set({ role: primary, roles }).where(eq(usersTable.id, targetId));
 
   // Auto-create doctor record when doctor role is newly added
   const hadDoctor = Array.isArray(target.roles) && target.roles.includes("doctor");
   const getsDoctor = roles.includes("doctor");
   if (getsDoctor && !hadDoctor) {
-    const existing = await db.query.doctorsTable.findFirst({ where: eq(doctorsTable.userId, targetId) });
+    const existing = await getDb().query.doctorsTable.findFirst({ where: eq(doctorsTable.userId, targetId) });
     if (!existing) {
       const nameParts = (target.name ?? target.email).split(/\s+/);
-      await db.insert(doctorsTable).values({
+      await getDb().insert(doctorsTable).values({
         userId: target.id,
         firstName: nameParts[0] ?? target.email,
         lastName: nameParts.slice(1).join(" ") || "-",
@@ -395,13 +434,13 @@ router.patch("/users/:id/deactivate", requireAuth, async (req, res): Promise<voi
 
   const deactivated: boolean = !!req.body.deactivated;
 
-  const target = await db.query.usersTable.findFirst({ where: eq(usersTable.id, targetId) });
+  const target = await getDb().query.usersTable.findFirst({ where: eq(usersTable.id, targetId) });
   if (!target || target.medicalCenterId !== session.medicalCenterId) {
     res.status(404).json({ error: "User not found" });
     return;
   }
 
-  await db.update(usersTable).set({ deactivated }).where(eq(usersTable.id, targetId));
+  await getDb().update(usersTable).set({ deactivated }).where(eq(usersTable.id, targetId));
   res.json({ ok: true, deactivated });
 });
 
@@ -414,7 +453,7 @@ router.patch("/users/ai-assistant", requireAuth, async (req, res): Promise<void>
   }
   const { enabled, targetUserId } = req.body as { enabled?: boolean; targetUserId?: number };
   const userId = (session.roles.includes("admin") && targetUserId) ? targetUserId : session.userId;
-  await db.update(usersTable).set({ aiAssistantEnabled: enabled ?? false }).where(eq(usersTable.id, userId));
+  await getDb().update(usersTable).set({ aiAssistantEnabled: enabled ?? false }).where(eq(usersTable.id, userId));
   res.json({ ok: true });
 });
 

@@ -1,7 +1,8 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { eq, ilike, and, or, sql } from "drizzle-orm";
-import { db, encounterActivitiesTable, consultationsTable, haadActivityCatalogueTable } from "@workspace/db";
+import { encounterActivitiesTable, consultationsTable, haadActivityCatalogueTable } from "@workspace/db";
 import { requireAuth, getSessionUser } from "../lib/session";
+import { getDb } from "../lib/tenant";
 
 const router: IRouter = Router();
 
@@ -26,8 +27,7 @@ router.get("/activities/catalogue", requireAuth, async (req, res): Promise<void>
     );
   }
 
-  const rows = await db
-    .select({
+  const rows = await getDb().select({
       id: haadActivityCatalogueTable.id,
       code: haadActivityCatalogueTable.code,
       description: haadActivityCatalogueTable.description,
@@ -54,8 +54,7 @@ router.get("/consultations/:id/activities", requireAuth, async (req, res): Promi
   const session = getSessionUser(req)!;
   const consultationId = parseInt(String(req.params.id));
 
-  const [consultation] = await db
-    .select()
+  const [consultation] = await getDb().select()
     .from(consultationsTable)
     .where(eq(consultationsTable.id, consultationId))
     .limit(1);
@@ -68,8 +67,7 @@ router.get("/consultations/:id/activities", requireAuth, async (req, res): Promi
     res.status(403).json({ error: "Access denied" }); return;
   }
 
-  const activities = await db
-    .select()
+  const activities = await getDb().select()
     .from(encounterActivitiesTable)
     .where(eq(encounterActivitiesTable.consultationId, consultationId))
     .orderBy(encounterActivitiesTable.addedAt);
@@ -85,8 +83,7 @@ router.post("/consultations/:id/activities", requireAuth, async (req, res): Prom
   }
 
   const consultationId = parseInt(String(req.params.id));
-  const [consultation] = await db
-    .select()
+  const [consultation] = await getDb().select()
     .from(consultationsTable)
     .where(eq(consultationsTable.id, consultationId))
     .limit(1);
@@ -109,8 +106,7 @@ router.post("/consultations/:id/activities", requireAuth, async (req, res): Prom
   const price = parseFloat(unitPrice);
   const total = (qty * price).toFixed(2);
 
-  const [activity] = await db
-    .insert(encounterActivitiesTable)
+  const [activity] = await getDb().insert(encounterActivitiesTable)
     .values({
       consultationId,
       activityCode,
@@ -134,16 +130,14 @@ router.patch("/activities/:id", requireAuth, async (req, res): Promise<void> => 
   }
 
   const activityId = parseInt(String(req.params.id));
-  const [activity] = await db
-    .select()
+  const [activity] = await getDb().select()
     .from(encounterActivitiesTable)
     .where(eq(encounterActivitiesTable.id, activityId))
     .limit(1);
 
   if (!activity) { res.status(404).json({ error: "Activity not found" }); return; }
 
-  const [consultation] = await db
-    .select()
+  const [consultation] = await getDb().select()
     .from(consultationsTable)
     .where(eq(consultationsTable.id, activity.consultationId))
     .limit(1);
@@ -156,8 +150,7 @@ router.patch("/activities/:id", requireAuth, async (req, res): Promise<void> => 
   const price = parseFloat(activity.unitPrice);
   const total = (qty * price).toFixed(2);
 
-  const [updated] = await db
-    .update(encounterActivitiesTable)
+  const [updated] = await getDb().update(encounterActivitiesTable)
     .set({ quantity: qty, total, notes: req.body.notes ?? activity.notes })
     .where(eq(encounterActivitiesTable.id, activityId))
     .returning();
@@ -173,16 +166,14 @@ router.delete("/activities/:id", requireAuth, async (req, res): Promise<void> =>
   }
 
   const activityId = parseInt(String(req.params.id));
-  const [activity] = await db
-    .select()
+  const [activity] = await getDb().select()
     .from(encounterActivitiesTable)
     .where(eq(encounterActivitiesTable.id, activityId))
     .limit(1);
 
   if (!activity) { res.status(404).json({ error: "Activity not found" }); return; }
 
-  const [consultation] = await db
-    .select()
+  const [consultation] = await getDb().select()
     .from(consultationsTable)
     .where(eq(consultationsTable.id, activity.consultationId))
     .limit(1);
@@ -191,8 +182,7 @@ router.delete("/activities/:id", requireAuth, async (req, res): Promise<void> =>
     res.status(403).json({ error: "Access denied" }); return;
   }
 
-  await db
-    .delete(encounterActivitiesTable)
+  await getDb().delete(encounterActivitiesTable)
     .where(eq(encounterActivitiesTable.id, activityId));
 
   res.status(204).send();

@@ -1,6 +1,6 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { eq, and, gte, lt } from "drizzle-orm";
-import { db, appointmentsTable, patientsTable, doctorsTable } from "@workspace/db";
+import { appointmentsTable, patientsTable, doctorsTable } from "@workspace/db";
 import {
   ListAppointmentsQueryParams,
   CreateAppointmentBody,
@@ -11,6 +11,7 @@ import {
   GetTodayAppointmentsQueryParams,
 } from "@workspace/api-zod";
 import { requireAuth, getSessionUser } from "../lib/session";
+import { getDb } from "../lib/tenant";
 
 const router: IRouter = Router();
 
@@ -27,9 +28,9 @@ function enrichAppointment(
 }
 
 async function getMaps() {
-  const patients = await db.select().from(patientsTable);
+  const patients = await getDb().select().from(patientsTable);
   const patientMap = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
-  const doctors = await db.select().from(doctorsTable);
+  const doctors = await getDb().select().from(doctorsTable);
   const doctorMap = new Map(doctors.map((d) => [d.id, `Dr. ${d.firstName} ${d.lastName}`]));
   return { patientMap, doctorMap };
 }
@@ -49,15 +50,14 @@ router.get("/appointments/slots", requireAuth, async (req, res): Promise<void> =
     res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD" }); return;
   }
 
-  const [doctor] = await db.select().from(doctorsTable).where(eq(doctorsTable.id, doctorId)).limit(1);
+  const [doctor] = await getDb().select().from(doctorsTable).where(eq(doctorsTable.id, doctorId)).limit(1);
   if (!doctor) { res.status(404).json({ error: "Doctor not found" }); return; }
 
   // Fetch all non-cancelled appointments for this doctor on this date
   const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0);
   const dayEnd   = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1, 0, 0, 0);
 
-  const booked = await db
-    .select({ scheduledAt: appointmentsTable.scheduledAt, status: appointmentsTable.status })
+  const booked = await getDb().select({ scheduledAt: appointmentsTable.scheduledAt, status: appointmentsTable.status })
     .from(appointmentsTable)
     .where(
       and(
@@ -112,8 +112,7 @@ router.get("/appointments/today", requireAuth, async (req, res): Promise<void> =
 
   const { patientMap, doctorMap } = await getMaps();
 
-  let all = await db
-    .select()
+  let all = await getDb().select()
     .from(appointmentsTable)
     .where(and(gte(appointmentsTable.scheduledAt, todayStart), lt(appointmentsTable.scheduledAt, todayEnd)));
 
@@ -144,7 +143,7 @@ router.get("/appointments", requireAuth, async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const { patientMap, doctorMap } = await getMaps();
-  let all = await db.select().from(appointmentsTable).orderBy(appointmentsTable.scheduledAt);
+  let all = await getDb().select().from(appointmentsTable).orderBy(appointmentsTable.scheduledAt);
 
   if (session.roles.includes("doctor") && session.doctorDbId != null) {
     all = all.filter((a) => a.doctorId === session.doctorDbId);
@@ -190,8 +189,7 @@ router.post("/appointments/book", requireAuth, async (req, res): Promise<void> =
   // Check slot is not already taken
   const slotStart = slotDate;
   const slotEnd = new Date(slotDate.getTime() + 30 * 60 * 1000);
-  const conflict = await db
-    .select({ id: appointmentsTable.id })
+  const conflict = await getDb().select({ id: appointmentsTable.id })
     .from(appointmentsTable)
     .where(
       and(
@@ -212,15 +210,13 @@ router.post("/appointments/book", requireAuth, async (req, res): Promise<void> =
   const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
   let queueNumber: number | null = null;
   if (slotDate >= todayStart && slotDate < todayEnd) {
-    const todayAppts = await db
-      .select()
+    const todayAppts = await getDb().select()
       .from(appointmentsTable)
       .where(and(gte(appointmentsTable.scheduledAt, todayStart), lt(appointmentsTable.scheduledAt, todayEnd)));
     queueNumber = todayAppts.length + 1;
   }
 
-  const [appointment] = await db
-    .insert(appointmentsTable)
+  const [appointment] = await getDb().insert(appointmentsTable)
     .values({
       patientId: session.patientDbId,
       doctorId: parseInt(doctorId),
@@ -244,8 +240,7 @@ router.patch("/appointments/:id/cancel", requireAuth, async (req, res): Promise<
   }
 
   const apptId = parseInt(String(req.params.id));
-  const [appointment] = await db
-    .select()
+  const [appointment] = await getDb().select()
     .from(appointmentsTable)
     .where(eq(appointmentsTable.id, apptId))
     .limit(1);
@@ -258,8 +253,7 @@ router.patch("/appointments/:id/cancel", requireAuth, async (req, res): Promise<
     res.status(400).json({ error: `Cannot cancel an appointment with status: ${appointment.status}` }); return;
   }
 
-  const [updated] = await db
-    .update(appointmentsTable)
+  const [updated] = await getDb().update(appointmentsTable)
     .set({ status: "cancelled" })
     .where(eq(appointmentsTable.id, apptId))
     .returning();
@@ -280,8 +274,7 @@ router.patch("/appointments/:id/reschedule", requireAuth, async (req, res): Prom
 
   if (!scheduledAt) { res.status(400).json({ error: "scheduledAt is required" }); return; }
 
-  const [appointment] = await db
-    .select()
+  const [appointment] = await getDb().select()
     .from(appointmentsTable)
     .where(eq(appointmentsTable.id, apptId))
     .limit(1);
@@ -302,8 +295,7 @@ router.patch("/appointments/:id/reschedule", requireAuth, async (req, res): Prom
 
   // Conflict check
   const slotEnd = new Date(newDate.getTime() + 30 * 60 * 1000);
-  const conflicts = await db
-    .select({ id: appointmentsTable.id })
+  const conflicts = await getDb().select({ id: appointmentsTable.id })
     .from(appointmentsTable)
     .where(
       and(
@@ -318,8 +310,7 @@ router.patch("/appointments/:id/reschedule", requireAuth, async (req, res): Prom
     res.status(409).json({ error: "This slot has just been booked. Please choose another." }); return;
   }
 
-  const [updated] = await db
-    .update(appointmentsTable)
+  const [updated] = await getDb().update(appointmentsTable)
     .set({ scheduledAt: newDate, doctorId: targetDoctorId, status: "scheduled" })
     .where(eq(appointmentsTable.id, apptId))
     .returning();
@@ -343,15 +334,13 @@ router.post("/appointments", requireAuth, async (req, res): Promise<void> => {
 
   let queueNumber: number | null = null;
   if (scheduledAt >= todayStart && scheduledAt < todayEnd) {
-    const todayAppts = await db
-      .select()
+    const todayAppts = await getDb().select()
       .from(appointmentsTable)
       .where(and(gte(appointmentsTable.scheduledAt, todayStart), lt(appointmentsTable.scheduledAt, todayEnd)));
     queueNumber = todayAppts.length + 1;
   }
 
-  const [appointment] = await db
-    .insert(appointmentsTable)
+  const [appointment] = await getDb().insert(appointmentsTable)
     .values({ ...parsed.data, scheduledAt, queueNumber })
     .returning();
 
@@ -364,8 +353,7 @@ router.get("/appointments/:id", requireAuth, async (req, res): Promise<void> => 
   const params = GetAppointmentParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-  const [appointment] = await db
-    .select()
+  const [appointment] = await getDb().select()
     .from(appointmentsTable)
     .where(eq(appointmentsTable.id, params.data.id));
 
@@ -399,8 +387,7 @@ router.patch("/appointments/:id", requireAuth, async (req, res): Promise<void> =
   if (parsed.data.queueNumber != null) updateData.queueNumber = parsed.data.queueNumber;
   if (parsed.data.scheduledAt != null) updateData.scheduledAt = new Date(parsed.data.scheduledAt);
 
-  const [appointment] = await db
-    .update(appointmentsTable)
+  const [appointment] = await getDb().update(appointmentsTable)
     .set(updateData)
     .where(eq(appointmentsTable.id, params.data.id))
     .returning();
@@ -419,8 +406,7 @@ router.delete("/appointments/:id", requireAuth, async (req, res): Promise<void> 
   const params = DeleteAppointmentParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-  const [appointment] = await db
-    .delete(appointmentsTable)
+  const [appointment] = await getDb().delete(appointmentsTable)
     .where(eq(appointmentsTable.id, params.data.id))
     .returning();
   if (!appointment) { res.status(404).json({ error: "Appointment not found" }); return; }

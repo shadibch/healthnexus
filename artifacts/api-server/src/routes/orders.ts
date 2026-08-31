@@ -1,7 +1,8 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, medicalOrdersTable } from "@workspace/db";
+import { medicalOrdersTable } from "@workspace/db";
 import { requireAuth, getSessionUser } from "../lib/session";
+import { getDb } from "../lib/tenant";
 
 const router: IRouter = Router();
 
@@ -10,7 +11,7 @@ router.patch("/orders/:id", requireAuth, async (req, res): Promise<void> => {
   const idNum = parseInt(String(req.params.id));
   if (isNaN(idNum)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const [existing] = await db.select().from(medicalOrdersTable).where(eq(medicalOrdersTable.id, idNum));
+  const [existing] = await getDb().select().from(medicalOrdersTable).where(eq(medicalOrdersTable.id, idNum));
   if (!existing) { res.status(404).json({ error: "Order not found" }); return; }
 
   const { status, resultData, resultNotes, completedAt } = req.body as {
@@ -24,8 +25,7 @@ router.patch("/orders/:id", requireAuth, async (req, res): Promise<void> => {
   if (completedAt) update.completedAt = new Date(completedAt);
   if (status === "completed" && !completedAt) update.completedAt = new Date();
 
-  const [updated] = await db
-    .update(medicalOrdersTable)
+  const [updated] = await getDb().update(medicalOrdersTable)
     .set(update)
     .where(eq(medicalOrdersTable.id, idNum))
     .returning();
@@ -42,7 +42,7 @@ router.delete("/orders/:id", requireAuth, async (req, res): Promise<void> => {
   const idNum = parseInt(String(req.params.id));
   if (isNaN(idNum)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  await db.update(medicalOrdersTable)
+  await getDb().update(medicalOrdersTable)
     .set({ status: "cancelled" })
     .where(eq(medicalOrdersTable.id, idNum));
   res.sendStatus(204);

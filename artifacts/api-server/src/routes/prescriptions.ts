@@ -1,6 +1,6 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, prescriptionsTable, prescriptionItemsTable, medicationsTable, patientsTable, doctorsTable } from "@workspace/db";
+import { prescriptionsTable, prescriptionItemsTable, medicationsTable, patientsTable, doctorsTable } from "@workspace/db";
 import {
   ListPrescriptionsQueryParams,
   CreatePrescriptionBody,
@@ -9,6 +9,7 @@ import {
   UpdatePrescriptionBody,
 } from "@workspace/api-zod";
 import { requireAuth, getSessionUser } from "../lib/session";
+import { getDb } from "../lib/tenant";
 
 const router: IRouter = Router();
 
@@ -17,8 +18,7 @@ async function enrichPrescription(
   patientMap: Map<number, string>,
   doctorMap: Map<number, string>
 ) {
-  const items = await db
-    .select({
+  const items = await getDb().select({
       id: prescriptionItemsTable.id,
       prescriptionId: prescriptionItemsTable.prescriptionId,
       medicationId: prescriptionItemsTable.medicationId,
@@ -50,12 +50,12 @@ router.get("/prescriptions", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const patients = await db.select().from(patientsTable);
+  const patients = await getDb().select().from(patientsTable);
   const patientMap = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
-  const doctors = await db.select().from(doctorsTable);
+  const doctors = await getDb().select().from(doctorsTable);
   const doctorMap = new Map(doctors.map((d) => [d.id, `Dr. ${d.firstName} ${d.lastName}`]));
 
-  let all = await db.select().from(prescriptionsTable).orderBy(prescriptionsTable.issuedAt);
+  let all = await getDb().select().from(prescriptionsTable).orderBy(prescriptionsTable.issuedAt);
 
   // Role-based isolation
   if (session.roles.includes("patient") && session.patientDbId != null) {
@@ -95,20 +95,19 @@ router.post("/prescriptions", requireAuth, async (req, res): Promise<void> => {
   }
 
   const { items, ...prescriptionData } = parsed.data;
-  const [prescription] = await db
-    .insert(prescriptionsTable)
+  const [prescription] = await getDb().insert(prescriptionsTable)
     .values(prescriptionData)
     .returning();
 
   if (items && items.length > 0) {
-    await db.insert(prescriptionItemsTable).values(
+    await getDb().insert(prescriptionItemsTable).values(
       items.map((item) => ({ ...item, prescriptionId: prescription.id }))
     );
   }
 
-  const patients = await db.select().from(patientsTable);
+  const patients = await getDb().select().from(patientsTable);
   const patientMap = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
-  const doctors = await db.select().from(doctorsTable);
+  const doctors = await getDb().select().from(doctorsTable);
   const doctorMap = new Map(doctors.map((d) => [d.id, `Dr. ${d.firstName} ${d.lastName}`]));
 
   const enriched = await enrichPrescription(prescription, patientMap, doctorMap);
@@ -122,8 +121,7 @@ router.get("/prescriptions/:id", requireAuth, async (req, res): Promise<void> =>
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [prescription] = await db
-    .select()
+  const [prescription] = await getDb().select()
     .from(prescriptionsTable)
     .where(eq(prescriptionsTable.id, params.data.id));
   if (!prescription) {
@@ -141,9 +139,9 @@ router.get("/prescriptions/:id", requireAuth, async (req, res): Promise<void> =>
     return;
   }
 
-  const patients = await db.select().from(patientsTable);
+  const patients = await getDb().select().from(patientsTable);
   const patientMap = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
-  const doctors = await db.select().from(doctorsTable);
+  const doctors = await getDb().select().from(doctorsTable);
   const doctorMap = new Map(doctors.map((d) => [d.id, `Dr. ${d.firstName} ${d.lastName}`]));
 
   res.json(await enrichPrescription(prescription, patientMap, doctorMap));
@@ -172,8 +170,7 @@ router.patch("/prescriptions/:id", requireAuth, async (req, res): Promise<void> 
   if (parsed.data.notes != null) updateData.notes = parsed.data.notes;
   if (parsed.data.dispensedAt != null) updateData.dispensedAt = new Date(parsed.data.dispensedAt);
 
-  const [prescription] = await db
-    .update(prescriptionsTable)
+  const [prescription] = await getDb().update(prescriptionsTable)
     .set(updateData)
     .where(eq(prescriptionsTable.id, params.data.id))
     .returning();
@@ -182,9 +179,9 @@ router.patch("/prescriptions/:id", requireAuth, async (req, res): Promise<void> 
     return;
   }
 
-  const patients = await db.select().from(patientsTable);
+  const patients = await getDb().select().from(patientsTable);
   const patientMap = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
-  const doctors = await db.select().from(doctorsTable);
+  const doctors = await getDb().select().from(doctorsTable);
   const doctorMap = new Map(doctors.map((d) => [d.id, `Dr. ${d.firstName} ${d.lastName}`]));
 
   res.json(await enrichPrescription(prescription, patientMap, doctorMap));

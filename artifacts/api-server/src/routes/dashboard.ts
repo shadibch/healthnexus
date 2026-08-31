@@ -1,8 +1,9 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { gte, lt, and, eq } from "drizzle-orm";
-import { db, patientsTable, doctorsTable, appointmentsTable, prescriptionsTable, stockTable, consultationsTable } from "@workspace/db";
+import { patientsTable, doctorsTable, appointmentsTable, prescriptionsTable, stockTable, consultationsTable } from "@workspace/db";
 import { GetDashboardActivityQueryParams } from "@workspace/api-zod";
 import { requireAuth, getSessionUser } from "../lib/session";
+import { getDb } from "../lib/tenant";
 
 const router: IRouter = Router();
 
@@ -14,17 +15,17 @@ router.get("/dashboard/stats", requireAuth, async (req, res): Promise<void> => {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
   const [allPatients, allDoctors, allStock] = await Promise.all([
-    db.select().from(patientsTable),
-    db.select().from(doctorsTable),
-    db.select().from(stockTable),
+    getDb().select().from(patientsTable),
+    getDb().select().from(doctorsTable),
+    getDb().select().from(stockTable),
   ]);
 
   // Fetch data filtered by role
-  let todayAppointments = await db.select().from(appointmentsTable).where(
+  let todayAppointments = await getDb().select().from(appointmentsTable).where(
     and(gte(appointmentsTable.scheduledAt, todayStart), lt(appointmentsTable.scheduledAt, todayEnd))
   );
-  let allPrescriptions = await db.select().from(prescriptionsTable);
-  let monthConsultations = await db.select().from(consultationsTable).where(gte(consultationsTable.createdAt, monthStart));
+  let allPrescriptions = await getDb().select().from(prescriptionsTable);
+  let monthConsultations = await getDb().select().from(consultationsTable).where(gte(consultationsTable.createdAt, monthStart));
 
   // Role-based isolation
   if (session.roles.includes("doctor") && session.doctorDbId != null) {
@@ -60,7 +61,7 @@ router.get("/dashboard/stats", requireAuth, async (req, res): Promise<void> => {
       const spec = doc.specialization;
       specializationDoctorMap.set(spec, (specializationDoctorMap.get(spec) ?? new Set()).add(doc.id));
     }
-    const allAppts = await db.select().from(appointmentsTable);
+    const allAppts = await getDb().select().from(appointmentsTable);
     for (const appt of allAppts) {
       const doc = allDoctors.find((d) => d.id === appt.doctorId);
       if (doc) {
@@ -101,11 +102,11 @@ router.get("/dashboard/activity", requireAuth, async (req, res): Promise<void> =
   const limit = parsed.data.limit ?? 10;
 
   const [patients, doctors, allAppointments, allPrescriptions, allConsultations] = await Promise.all([
-    db.select().from(patientsTable),
-    db.select().from(doctorsTable),
-    db.select().from(appointmentsTable).orderBy(appointmentsTable.updatedAt),
-    db.select().from(prescriptionsTable).orderBy(prescriptionsTable.updatedAt),
-    db.select().from(consultationsTable).orderBy(consultationsTable.updatedAt),
+    getDb().select().from(patientsTable),
+    getDb().select().from(doctorsTable),
+    getDb().select().from(appointmentsTable).orderBy(appointmentsTable.updatedAt),
+    getDb().select().from(prescriptionsTable).orderBy(prescriptionsTable.updatedAt),
+    getDb().select().from(consultationsTable).orderBy(consultationsTable.updatedAt),
   ]);
 
   // Role-based filtering

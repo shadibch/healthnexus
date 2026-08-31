@@ -1,7 +1,8 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { eq, ilike } from "drizzle-orm";
-import { db, doctorsTable, appointmentsTable, patientsTable } from "@workspace/db";
+import { doctorsTable, appointmentsTable, patientsTable } from "@workspace/db";
 import { requireAuth, getSessionUser } from "../lib/session";
+import { getDb } from "../lib/tenant";
 import {
   ListDoctorsQueryParams,
   CreateDoctorBody,
@@ -24,12 +25,11 @@ router.get("/doctors", async (req, res): Promise<void> => {
 
   let doctors;
   if (specialization) {
-    doctors = await db
-      .select()
+    doctors = await getDb().select()
       .from(doctorsTable)
       .where(ilike(doctorsTable.specialization, `%${specialization}%`));
   } else {
-    doctors = await db.select().from(doctorsTable);
+    doctors = await getDb().select().from(doctorsTable);
   }
   res.json(doctors);
 });
@@ -40,7 +40,7 @@ router.post("/doctors", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [doctor] = await db.insert(doctorsTable).values(parsed.data as any).returning();
+  const [doctor] = await getDb().insert(doctorsTable).values(parsed.data as any).returning();
   res.status(201).json(doctor);
 });
 
@@ -50,7 +50,7 @@ router.get("/doctors/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [doctor] = await db.select().from(doctorsTable).where(eq(doctorsTable.id, params.data.id));
+  const [doctor] = await getDb().select().from(doctorsTable).where(eq(doctorsTable.id, params.data.id));
   if (!doctor) {
     res.status(404).json({ error: "Doctor not found" });
     return;
@@ -73,8 +73,7 @@ router.patch("/doctors/:id", requireAuth, async (req, res): Promise<void> => {
 
   const data = { ...parsed.data } as Record<string, unknown>;
 
-  const [doctor] = await db
-    .update(doctorsTable)
+  const [doctor] = await getDb().update(doctorsTable)
     .set(data as any)
     .where(eq(doctorsTable.id, params.data.id))
     .returning();
@@ -91,7 +90,7 @@ router.delete("/doctors/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [doctor] = await db.delete(doctorsTable).where(eq(doctorsTable.id, params.data.id)).returning();
+  const [doctor] = await getDb().delete(doctorsTable).where(eq(doctorsTable.id, params.data.id)).returning();
   if (!doctor) {
     res.status(404).json({ error: "Doctor not found" });
     return;
@@ -106,7 +105,7 @@ router.get("/doctors/:id/schedule", async (req, res): Promise<void> => {
     return;
   }
   const doctorId = params.data.id;
-  const [doctor] = await db.select().from(doctorsTable).where(eq(doctorsTable.id, doctorId));
+  const [doctor] = await getDb().select().from(doctorsTable).where(eq(doctorsTable.id, doctorId));
   if (!doctor) {
     res.status(404).json({ error: "Doctor not found" });
     return;
@@ -116,11 +115,10 @@ router.get("/doctors/:id/schedule", async (req, res): Promise<void> => {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
 
-  const patients = await db.select().from(patientsTable);
+  const patients = await getDb().select().from(patientsTable);
   const patientMap = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
 
-  const todayAppointments = await db
-    .select()
+  const todayAppointments = await getDb().select()
     .from(appointmentsTable)
     .where(eq(appointmentsTable.doctorId, doctorId));
 

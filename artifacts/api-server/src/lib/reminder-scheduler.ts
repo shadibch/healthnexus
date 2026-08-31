@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import {
   appointmentReminderConfigsTable,
   appointmentReminderLogsTable,
@@ -10,10 +10,14 @@ import {
   EMAIL_DEFAULT_TEMPLATE,
   WHATSAPP_DEFAULT_TEMPLATE,
 } from "@workspace/db";
+import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import * as schema from "@workspace/db/schema";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { format } from "date-fns";
 import { logger } from "./logger";
 import { sendEmail as sendEmailShared } from "./email-provider";
+import { getDb } from "./tenant";
+import { tenantSchemaName } from "./tenant-schema";
 
 // ── Template rendering ────────────────────────────────────────────────────────
 
@@ -90,14 +94,16 @@ export const DEFAULT_REMINDER_CONFIGS = [
 ] as const;
 
 export async function seedDefaultConfigs(medicalCenterId: number): Promise<void> {
-  const existing = await db
+  // Runs inside a request (tenant context), so getDb() returns the clinic DB.
+  const d = getDb();
+  const existing = await d
     .select({ id: appointmentReminderConfigsTable.id })
     .from(appointmentReminderConfigsTable)
     .where(eq(appointmentReminderConfigsTable.medicalCenterId, medicalCenterId));
 
   if (existing.length > 0) return;
 
-  await db.insert(appointmentReminderConfigsTable).values(
+  await d.insert(appointmentReminderConfigsTable).values(
     DEFAULT_REMINDER_CONFIGS.map((c) => ({ ...c, medicalCenterId })),
   );
   logger.info({ medicalCenterId }, "Seeded default reminder configs");
@@ -105,14 +111,22 @@ export async function seedDefaultConfigs(medicalCenterId: number): Promise<void>
 
 // ── Main scheduler tick ───────────────────────────────────────────────────────
 
-export async function runReminderTick(): Promise<void> {
-  logger.debug("Reminder scheduler tick started");
-
-  // Find enabled configs
-  const configs = await db
+/** Process reminders for a single clinic, using a drizzle instance whose
+ * Postgres search_path already points at that clinic's schema. */
+async function processClinic(
+  d: NodePgDatabase<typeof schema>,
+  medicalCenterId: number,
+): Promise<void> {
+  // Find enabled configs for THIS clinic
+  const configs = await d
     .select()
     .from(appointmentReminderConfigsTable)
-    .where(eq(appointmentReminderConfigsTable.enabled, true));
+    .where(
+      and(
+        eq(appointmentReminderConfigsTable.enabled, true),
+        eq(appointmentReminderConfigsTable.medicalCenterId, medicalCenterId),
+      ),
+    );
 
   if (configs.length === 0) return;
 
@@ -127,7 +141,7 @@ export async function runReminderTick(): Promise<void> {
           ? sql`interval '1 hour' * ${config.offsetValue}`
           : sql`interval '1 minute' * ${config.offsetValue}`;
 
-      const rows = await db.execute(sql`
+      const rows = await d.execute(sql`
         SELECT
           a.id            AS appointment_id,
           a.patient_id,
@@ -141,7 +155,6 @@ export async function runReminderTick(): Promise<void> {
           p.phone         AS patient_phone,
           d.first_name    AS doctor_first_name,
           d.last_name     AS doctor_last_name,
-          d.medical_center_id,
           mc.name         AS clinic_name
         FROM appointments a
         JOIN doctors  d  ON d.id  = a.doctor_id
@@ -150,7 +163,7 @@ export async function runReminderTick(): Promise<void> {
         WHERE
           a.status IN ('scheduled', 'confirmed')
           AND a.scheduled_at > NOW()
-          AND d.medical_center_id = ${config.medicalCenterId}
+          AND d.medical_center_id = ${medicalCenterId}
           AND (a.scheduled_at - ${intervalExpr})
                 BETWEEN NOW() - INTERVAL '10 minutes' AND NOW()
           AND NOT EXISTS (
@@ -204,7 +217,7 @@ export async function runReminderTick(): Promise<void> {
           logger.warn({ appointmentId: row.appointment_id, configId: config.id, err: sendErr }, "Reminder send failed");
         }
 
-        await db.insert(appointmentReminderLogsTable).values({
+        await d.insert(appointmentReminderLogsTable).values({
           appointmentId: row.appointment_id as number,
           patientId: row.patient_id as number,
           configId: config.id,
@@ -221,6 +234,30 @@ export async function runReminderTick(): Promise<void> {
       }
     } catch (err) {
       logger.error({ configId: config.id, err }, "Error processing reminder config");
+    }
+  }
+}
+
+export async function runReminderTick(): Promise<void> {
+  logger.debug("Reminder scheduler tick started");
+
+  // Enumerate every clinic (medical center) that has a tenant schema.
+  const centers = await db
+    .select({ id: medicalCentersTable.id, schemaName: medicalCentersTable.schemaName })
+    .from(medicalCentersTable)
+    .where(sql`${medicalCentersTable.schemaName} IS NOT NULL`);
+
+  for (const center of centers) {
+    const client = await pool.connect();
+    try {
+      const schemaName = center.schemaName ?? tenantSchemaName(center.id);
+      await client.query(`SET search_path TO ${schemaName}, public`);
+      const d = drizzle(client, { schema });
+      await processClinic(d, center.id);
+    } catch (err) {
+      logger.error({ centerId: center.id, err }, "Error processing clinic reminders");
+    } finally {
+      client.release();
     }
   }
 

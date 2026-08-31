@@ -1,8 +1,9 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { eq, and, gte, lt } from "drizzle-orm";
-import { db, appointmentsTable, patientsTable, doctorsTable } from "@workspace/db";
+import { appointmentsTable, patientsTable, doctorsTable } from "@workspace/db";
 import { AdvanceQueueParams } from "@workspace/api-zod";
 import { requireAuth, getSessionUser } from "../lib/session";
+import { getDb } from "../lib/tenant";
 
 const router: IRouter = Router();
 const STATUS_ORDER = ["scheduled", "in_progress", "completed"];
@@ -14,13 +15,12 @@ router.get("/queue", requireAuth, async (req, res): Promise<void> => {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
 
-  const patients = await db.select().from(patientsTable);
+  const patients = await getDb().select().from(patientsTable);
   const patientMap = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
-  const doctors = await db.select().from(doctorsTable);
+  const doctors = await getDb().select().from(doctorsTable);
   const doctorMap = new Map(doctors.map((d) => [d.id, `Dr. ${d.firstName} ${d.lastName}`]));
 
-  let appointments = await db
-    .select()
+  let appointments = await getDb().select()
     .from(appointmentsTable)
     .where(and(gte(appointmentsTable.scheduledAt, todayStart), lt(appointmentsTable.scheduledAt, todayEnd)));
 
@@ -62,8 +62,7 @@ router.post("/queue/:appointmentId/advance", requireAuth, async (req, res): Prom
     return;
   }
 
-  const [appointment] = await db
-    .select()
+  const [appointment] = await getDb().select()
     .from(appointmentsTable)
     .where(eq(appointmentsTable.id, params.data.appointmentId));
   if (!appointment) {
@@ -82,22 +81,20 @@ router.post("/queue/:appointmentId/advance", requireAuth, async (req, res): Prom
     ? STATUS_ORDER[currentIndex + 1]
     : appointment.status;
 
-  const [updated] = await db
-    .update(appointmentsTable)
+  const [updated] = await getDb().update(appointmentsTable)
     .set({ status: nextStatus })
     .where(eq(appointmentsTable.id, params.data.appointmentId))
     .returning();
 
-  const patients = await db.select().from(patientsTable);
+  const patients = await getDb().select().from(patientsTable);
   const patientMap = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
-  const doctors = await db.select().from(doctorsTable);
+  const doctors = await getDb().select().from(doctorsTable);
   const doctorMap = new Map(doctors.map((d) => [d.id, `Dr. ${d.firstName} ${d.lastName}`]));
 
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
-  const todayAppts = await db
-    .select()
+  const todayAppts = await getDb().select()
     .from(appointmentsTable)
     .where(and(gte(appointmentsTable.scheduledAt, todayStart), lt(appointmentsTable.scheduledAt, todayEnd)));
   const waitingCount = todayAppts.filter((a) => ["scheduled", "confirmed"].includes(a.status)).length;
@@ -125,8 +122,7 @@ router.post("/queue/:appointmentId/no-show", requireAuth, async (req, res): Prom
     return;
   }
 
-  const [appointment] = await db
-    .select()
+  const [appointment] = await getDb().select()
     .from(appointmentsTable)
     .where(eq(appointmentsTable.id, params.data.appointmentId));
   if (!appointment) {
@@ -139,8 +135,7 @@ router.post("/queue/:appointmentId/no-show", requireAuth, async (req, res): Prom
     return;
   }
 
-  await db
-    .update(appointmentsTable)
+  await getDb().update(appointmentsTable)
     .set({ status: "no_show" })
     .where(eq(appointmentsTable.id, params.data.appointmentId));
 

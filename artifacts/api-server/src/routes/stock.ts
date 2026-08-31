@@ -1,12 +1,13 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, stockTable, medicationsTable } from "@workspace/db";
+import { stockTable, medicationsTable } from "@workspace/db";
 import {
   ListStockQueryParams,
   CreateStockBody,
   UpdateStockParams,
   UpdateStockBody,
 } from "@workspace/api-zod";
+import { getDb } from "../lib/tenant";
 
 const router: IRouter = Router();
 
@@ -22,7 +23,7 @@ function isExpiringSoon(s: typeof stockTable.$inferSelect) {
 }
 
 async function enrichStock(s: typeof stockTable.$inferSelect) {
-  const [med] = await db.select().from(medicationsTable).where(eq(medicationsTable.id, s.medicationId));
+  const [med] = await getDb().select().from(medicationsTable).where(eq(medicationsTable.id, s.medicationId));
   return {
     ...s,
     medicationName: med?.name ?? null,
@@ -37,10 +38,10 @@ router.get("/stock", async (req, res): Promise<void> => {
     return;
   }
 
-  const meds = await db.select().from(medicationsTable);
+  const meds = await getDb().select().from(medicationsTable);
   const medMap = new Map(meds.map((m) => [m.id, m.name]));
 
-  let all = await db.select().from(stockTable);
+  let all = await getDb().select().from(stockTable);
   if (parsed.data.medicationId) {
     all = all.filter((s) => s.medicationId === parsed.data.medicationId);
   }
@@ -58,10 +59,10 @@ router.get("/stock", async (req, res): Promise<void> => {
 });
 
 router.get("/stock/alerts", async (req, res): Promise<void> => {
-  const meds = await db.select().from(medicationsTable);
+  const meds = await getDb().select().from(medicationsTable);
   const medMap = new Map(meds.map((m) => [m.id, m.name]));
 
-  const all = await db.select().from(stockTable);
+  const all = await getDb().select().from(stockTable);
   const enriched = all.map((s) => ({
     ...s,
     medicationName: medMap.get(s.medicationId) ?? null,
@@ -85,8 +86,8 @@ router.post("/stock", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [stock] = await db.insert(stockTable).values(parsed.data as any).returning();
-  const [med] = await db.select().from(medicationsTable).where(eq(medicationsTable.id, stock.medicationId));
+  const [stock] = await getDb().insert(stockTable).values(parsed.data as any).returning();
+  const [med] = await getDb().select().from(medicationsTable).where(eq(medicationsTable.id, stock.medicationId));
   res.status(201).json({ ...stock, medicationName: med?.name ?? null, isLowStock: isLowStock(stock) });
 });
 
@@ -101,8 +102,7 @@ router.patch("/stock/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [stock] = await db
-    .update(stockTable)
+  const [stock] = await getDb().update(stockTable)
     .set(parsed.data as any)
     .where(eq(stockTable.id, params.data.id))
     .returning();
@@ -110,7 +110,7 @@ router.patch("/stock/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Stock item not found" });
     return;
   }
-  const [med] = await db.select().from(medicationsTable).where(eq(medicationsTable.id, stock.medicationId));
+  const [med] = await getDb().select().from(medicationsTable).where(eq(medicationsTable.id, stock.medicationId));
   res.json({ ...stock, medicationName: med?.name ?? null, isLowStock: isLowStock(stock) });
 });
 

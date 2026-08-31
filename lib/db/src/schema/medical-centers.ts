@@ -9,6 +9,7 @@ export const medicalCentersTable = pgTable("medical_centers", {
   latitude: numeric("latitude", { precision: 10, scale: 6 }),
   longitude: numeric("longitude", { precision: 10, scale: 6 }),
   adminUserId: integer("admin_user_id"),
+  schemaName: text("schema_name"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
