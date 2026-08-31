@@ -3,6 +3,8 @@ import { eq } from "drizzle-orm";
 import { pool, usersTable, medicalCentersTable, staffInvitesTable, doctorsTable, patientsTable } from "@workspace/db";
 import { requireAuth, getSessionUser, primaryRole } from "../lib/session";
 import { hashPassword, verifyPassword } from "../lib/password";
+import { drizzle } from "drizzle-orm/node-postgres";
+import * as schema from "@workspace/db/schema";
 import { getDb } from "../lib/tenant";
 import { ensureTenantSchema, tenantSchemaName } from "../lib/tenant-schema";
 import { logger } from "../lib/logger";
@@ -101,6 +103,8 @@ router.post("/users/onboarding/admin", requireAuth, async (req, res): Promise<vo
   const client = await pool.connect();
   let centerId: number;
   let schemaName: string;
+  let doctor: (typeof doctorsTable.$inferSelect) | null = null;
+  const wantsDoctor = session.roles.includes("doctor");
   try {
     await client.query("BEGIN");
 
@@ -117,6 +121,27 @@ router.post("/users/onboarding/admin", requireAuth, async (req, res): Promise<vo
 
     // Clone the clinic-scoped working tables into the new schema.
     await ensureTenantSchema(client, centerId);
+
+    // If the admin is also a doctor, create their doctor profile INSIDE the new
+    // clinic schema (doctors is a tenant table). Point the checked-out client at
+    // the new schema and write through a tenant-bound Drizzle instance so the
+    // record lives in tenant_clinic_id_<id>.doctors, atomic with the clinic insert.
+    if (wantsDoctor) {
+      await client.query(`SET search_path TO ${schemaName}, public`);
+      const tenantDb = drizzle(client, { schema });
+      const displayName = adminName?.trim() || session.name || session.email;
+      const nameParts = displayName.split(" ");
+      const firstName = nameParts[0] ?? session.email;
+      const lastName = nameParts.slice(1).join(" ") || "-";
+      [doctor] = await tenantDb.insert(doctorsTable).values({
+        userId: session.userId,
+        firstName,
+        lastName,
+        specialization: specialization?.trim() || "General Practitioner",
+        email: session.email,
+        medicalCenterId: centerId,
+      }).returning();
+    }
 
     // Persist the schema name on the registry row.
     await getDb().update(medicalCentersTable)
@@ -143,23 +168,6 @@ router.post("/users/onboarding/admin", requireAuth, async (req, res): Promise<vo
   const center = await getDb().query.medicalCentersTable.findFirst({
     where: eq(medicalCentersTable.id, centerId),
   });
-
-  // If the admin is also a doctor, create a doctor record
-  let doctor = null;
-  if (session.roles.includes("doctor")) {
-    const displayName = adminName?.trim() || session.name || session.email;
-    const nameParts = displayName.split(" ");
-    const firstName = nameParts[0] ?? session.email;
-    const lastName = nameParts.slice(1).join(" ") || "-";
-    [doctor] = await getDb().insert(doctorsTable).values({
-      userId: session.userId,
-      firstName,
-      lastName,
-      specialization: specialization?.trim() || "General Practitioner",
-      email: session.email,
-      medicalCenterId: centerId,
-    }).returning();
-  }
 
   res.json({ ok: true, center, doctor });
 });

@@ -18,3 +18,5 @@ export * from "./medical-centers";
 export * from "./staff-invites";
 export * from "./reminder-configs";
 export * from "./reminder-logs";
+export * from "./conversations";
+export * from "./messages";
