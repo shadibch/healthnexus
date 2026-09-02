@@ -1,0 +1,47 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "resourceGroupName": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/subscription-id/resourceGroups/rg-name/providers/Microsoft.KeyVault/vaults/kv-name"
+        },
+        "secretName": "resourceGroupName"
+      }
+    },
+    "location": {
+      "value": "germanywestcentral"
+    },
+    "namePrefix": {
+      "value": "hnx"
+    },
+    "postgresAdminLogin": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/subscription-id/resourceGroups/rg-name/providers/Microsoft.KeyVault/vaults/kv-name"
+        },
+        "secretName": "postgresAdminLogin"
+      }
+    },
+    "postgresAdminPassword": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/subscription-id/resourceGroups/rg-name/providers/Microsoft.KeyVault/vaults/kv-name"
+        },
+        "secretName": "postgresAdminPassword"
+      }
+    },
+    "sessionSecret": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/subscription-id/resourceGroups/rg-name/providers/Microsoft.KeyVault/vaults/kv-name"
+        },
+        "secretName": "sessionSecret"
+      }
+    },
+    "appBaseUrl": {
+      "value": "https://healthnexus-api.example.com"
+    }
+  }
+}

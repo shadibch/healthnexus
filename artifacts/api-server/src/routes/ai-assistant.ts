@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { requireAuth, requireRole, getSessionUser } from "../lib/session";
-import { openai } from "../lib/openai";
+import { getOpenAI } from "../lib/openai";
 import { consultationsTable, patientsTable, medicationsTable, prescriptionItemsTable, prescriptionsTable } from "@workspace/db";
 import { getDb } from "../lib/tenant";
 import { eq, desc } from "drizzle-orm";
@@ -66,7 +66,7 @@ Provide a structured response in JSON with these fields:
 If the presentation is clear, provide 2-3 ranked diagnoses. If unclear, provide 3-5 and emphasize recommended tests. Always include relevant red flags.`;
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAI().chat.completions.create({
       model: "gpt-4o",
       max_tokens: 2000,
       messages: [
@@ -164,7 +164,7 @@ Provide structured prescription assistance as JSON:
 }`;
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAI().chat.completions.create({
       model: "gpt-4o",
       max_tokens: 2000,
       messages: [
