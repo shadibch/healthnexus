@@ -41,7 +41,8 @@
       }
     },
     "appBaseUrl": {
-      "value": "https://healthnexus-api.example.com"
+      "value": "https://hnx-app.ambitiouswater-b35a6598.uaenorth.azurecontainerapps.io"
     }
   }
 }
+
