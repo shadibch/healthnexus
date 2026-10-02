@@ -5,7 +5,7 @@ Bilingual-ready (Arabic/English with RTL) and mobile-friendly. It covers four
 roles — **Doctor, Patient, Pharmacy, Receptionist** — with session-based auth and
 full per-role data isolation.
 
-**Live on Azure:** `https://waf2name-evhwdnc6hyh5a9f6.z03.azurefd.net`
+
 
 ---
 
