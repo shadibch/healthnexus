@@ -7,6 +7,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@workspace/db/schema";
 import { getDb } from "../lib/tenant";
 import { ensureTenantSchema, tenantSchemaName } from "../lib/tenant-schema";
+import { isEmailConfigured } from "../lib/email-provider";
 import { logger } from "../lib/logger";
 import { z } from "zod";
 
@@ -250,6 +251,10 @@ router.post("/users/create-staff", requireAuth, async (req, res): Promise<void> 
       medicalCenterId: session.medicalCenterId,
       onboardingComplete: true,
       mustChangePassword: true,
+      // The admin provisions this account and hands over the temporary
+      // password directly; skip email verification when no provider is set
+      // (otherwise the account could never be activated).
+      emailVerified: !isEmailConfigured(),
     }).returning();
   } catch (err) {
     res.status(500).json({ error: "Failed to create staff account" });

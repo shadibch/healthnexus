@@ -129,6 +129,19 @@ async function sendViaSmtp(opts: EmailProviderOptions): Promise<void> {
 }
 
 /**
+ * True when a real email provider is configured. When false (e.g. a demo /
+ * self-hosted deployment without SMTP), accounts are activated immediately
+ * because verification emails can never be delivered.
+ */
+export function isEmailConfigured(): boolean {
+  return Boolean(
+    (process.env.HOSTINGER_MAIL_API_TOKEN && process.env.HOSTINGER_MAILBOX_ID) ||
+      process.env.RESEND_API_KEY ||
+      process.env.SMTP_HOST,
+  );
+}
+
+/**
  * Send an email. Provider selection order.
  */
 export async function sendEmail(opts: EmailProviderOptions): Promise<void> {

@@ -5,6 +5,7 @@ import { usersTable, staffInvitesTable } from "@workspace/db";
 import { getSessionUser, requireAuth, startSession, destroySession, resolveSessionUser } from "../lib/session";
 import { hashPassword, verifyPassword } from "../lib/password";
 import { sendEmail } from "../lib/mailer";
+import { isEmailConfigured } from "../lib/email-provider";
 import {
   createEmailVerification,
   createPasswordResetToken,
@@ -78,6 +79,11 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 
   const assignedRole = invite ? invite.role : "pending";
 
+  // Without a configured email provider, verification links can never be
+  // delivered — activate the account immediately so it stays usable (demo /
+  // self-hosted deployments).
+  const emailConfigured = isEmailConfigured();
+
   const [created] = await getDb().insert(usersTable)
     .values({
       email,
@@ -87,7 +93,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
       roles: invite ? [invite.role] : [],
       medicalCenterId: invite ? invite.medicalCenterId : null,
       onboardingComplete: false,
-      emailVerified: false,
+      emailVerified: !emailConfigured,
     })
     .returning();
 
