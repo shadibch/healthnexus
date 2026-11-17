@@ -5,17 +5,21 @@ import { eq } from "drizzle-orm";
 export type AppRole =
   | "admin"
   | "doctor"
+  | "nurse"
   | "patient"
   | "pharmacist"
   | "pharmacy"
   | "receptionist"
+  | "accountant"
   | "pending";
 
 // Priority order for selecting the "primary" display role
 const ROLE_PRIORITY: Record<string, number> = {
-  admin:        6,
-  doctor:       5,
-  receptionist: 4,
+  admin:        8,
+  doctor:       7,
+  nurse:        6,
+  receptionist: 5,
+  accountant:   4,
   pharmacist:   3,
   pharmacy:     2,
   patient:      1,

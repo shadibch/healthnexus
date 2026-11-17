@@ -1,6 +1,6 @@
 ﻿import { Router, type IRouter } from "express";
 import { eq, desc, lt, and } from "drizzle-orm";
-import { consultationsTable, patientsTable, doctorsTable, medicalOrdersTable, doctorCategoriesTable } from "@workspace/db";
+import { consultationsTable, patientsTable, doctorsTable, medicalOrdersTable, doctorCategoriesTable, appointmentsTable } from "@workspace/db";
 import {
   ListConsultationsQueryParams,
   CreateConsultationBody,
@@ -91,8 +91,10 @@ router.get("/consultations", requireAuth, async (req, res): Promise<void> => {
 // Create consultation/encounter with 7-day follow-up detection + fee auto-apply
 router.post("/consultations", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (!session.roles.includes("doctor")) {
-    res.status(403).json({ error: "Only doctors can create consultations" });
+  const isDoctor = session.roles.includes("doctor");
+  const isNurse = session.roles.includes("nurse");
+  if (!isDoctor && !isNurse) {
+    res.status(403).json({ error: "Only doctors or nurses can create consultations" });
     return;
   }
 
@@ -103,9 +105,31 @@ router.post("/consultations", requireAuth, async (req, res): Promise<void> => {
   }
 
   const data = parsed.data as any;
-  const doctorId = session.doctorDbId!;
   const patientId = data.patientId;
   const appointmentId = data.appointmentId;
+
+  // Nurses record physical measurements (vitals) and notes only; diagnoses,
+  // treatment plans and follow-up scheduling remain doctor-only.
+  if (!isDoctor) {
+    data.chiefComplaint = null;
+    data.diagnosis = null;
+    data.treatmentPlan = null;
+    data.followUpDate = null;
+  }
+
+  // The encounter is owned by a doctor. Nurses doing intake/vitals have no
+  // doctor profile, so attribute it to the appointment's doctor instead.
+  let doctorId: number | null = session.doctorDbId ?? null;
+  if (doctorId == null && appointmentId) {
+    const [appt] = await getDb().select()
+      .from(appointmentsTable)
+      .where(eq(appointmentsTable.id, appointmentId));
+    doctorId = appt?.doctorId ?? null;
+  }
+  if (doctorId == null) {
+    res.status(400).json({ error: "No doctor associated with this encounter" });
+    return;
+  }
 
   // Prevent duplicate encounter for the same appointment
   if (appointmentId) {
@@ -212,8 +236,10 @@ router.get("/consultations/:id", requireAuth, async (req, res): Promise<void> =>
 
 router.patch("/consultations/:id", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (!session.roles.includes("doctor")) {
-    res.status(403).json({ error: "Only doctors can update consultations" });
+  const isDoctor = session.roles.includes("doctor");
+  const isNurse = session.roles.includes("nurse");
+  if (!isDoctor && !isNurse) {
+    res.status(403).json({ error: "Only doctors or nurses can update consultations" });
     return;
   }
 
@@ -228,8 +254,19 @@ router.patch("/consultations/:id", requireAuth, async (req, res): Promise<void> 
     return;
   }
 
+  // Nurses may only record physical measurements (vitals) and notes — not
+  // diagnoses, treatment plans, or fees, which stay doctor-only.
+  const src = parsed.data as Record<string, unknown>;
+  const update: Record<string, unknown> = {};
+  if (isDoctor) {
+    Object.assign(update, src);
+  } else {
+    if (src.vitals !== undefined) update.vitals = src.vitals;
+    if (src.notes !== undefined) update.notes = src.notes;
+  }
+
   const [consultation] = await getDb().update(consultationsTable)
-    .set(parsed.data)
+    .set(update as any)
     .where(eq(consultationsTable.id, params.data.id))
     .returning();
   if (!consultation) {

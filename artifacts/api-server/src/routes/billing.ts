@@ -9,7 +9,7 @@ const router: IRouter = Router();
 // GET /billing/claims?from=YYYY-MM-DD&to=YYYY-MM-DD&status=partial
 router.get("/billing/claims", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (!session.roles.includes("receptionist") && !session.roles.includes("doctor")) {
+  if (!session.roles.includes("receptionist") && !session.roles.includes("doctor") && !session.roles.includes("accountant")) {
     res.status(403).json({ error: "Access denied" });
     return;
   }
@@ -85,8 +85,8 @@ router.get("/billing/claims", requireAuth, async (req, res): Promise<void> => {
 // PATCH /consultations/:id/payment — receptionist/doctor can record payment
 router.patch("/consultations/:id/payment", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (!session.roles.includes("receptionist") && !session.roles.includes("doctor")) {
-    res.status(403).json({ error: "Only receptionist or doctor can record payment" });
+  if (!session.roles.includes("receptionist") && !session.roles.includes("doctor") && !session.roles.includes("accountant")) {
+    res.status(403).json({ error: "Only receptionist, doctor or accountant can record payment" });
     return;
   }
 

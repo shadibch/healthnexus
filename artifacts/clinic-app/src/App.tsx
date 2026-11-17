@@ -47,8 +47,10 @@ const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function rootPage(roles: string[]) {
   const has = (...rs: string[]) => rs.some(r => roles.includes(r));
-  // Pure receptionist (not also a doctor) → reception-focused home
-  if (has("receptionist") && !has("doctor", "admin")) return <ReceptionPage />;
+  // Pure receptionist / nurse (not also a doctor) → reception-focused home
+  if ((has("receptionist") || has("nurse")) && !has("doctor", "admin")) return <ReceptionPage />;
+  // Pure accountant (not also a doctor/admin) → billing home
+  if (has("accountant") && !has("doctor", "admin")) return <BillingPage />;
   // Pure admin (not also a doctor) → admin home
   if (has("admin") && !has("doctor")) return <AdminPage />;
   // Everyone else (doctor, patient, multi-role with doctor) → dashboard

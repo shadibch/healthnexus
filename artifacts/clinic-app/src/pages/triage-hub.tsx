@@ -139,33 +139,37 @@ export default function TriageHubPage() {
   // Track new tasks for highlight animation
   useEffect(() => {
     const tasks = tasksQuery.data;
-    if (!tasks) return;
-    if (!initializedRef.current) {
-      setSeenIds(new Set(tasks.map((t) => t.id)));
-      initializedRef.current = true;
-      return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (tasks) {
+      if (!initializedRef.current) {
+        setSeenIds(new Set(tasks.map((t) => t.id)));
+        initializedRef.current = true;
+      } else {
+        const newOnes = tasks.filter((t) => !seenIds.has(t.id)).map((t) => t.id);
+        if (newOnes.length > 0) {
+          setSeenIds((prev) => {
+            const next = new Set(prev);
+            newOnes.forEach((id) => next.add(id));
+            return next;
+          });
+          setHighlightIds((prev) => {
+            const next = new Set(prev);
+            newOnes.forEach((id) => next.add(id));
+            return next;
+          });
+          timer = setTimeout(() => {
+            setHighlightIds((prev) => {
+              const next = new Set(prev);
+              newOnes.forEach((id) => next.delete(id));
+              return next;
+            });
+          }, 3000);
+        }
+      }
     }
-    const newOnes = tasks.filter((t) => !seenIds.has(t.id)).map((t) => t.id);
-    if (newOnes.length > 0) {
-      setSeenIds((prev) => {
-        const next = new Set(prev);
-        newOnes.forEach((id) => next.add(id));
-        return next;
-      });
-      setHighlightIds((prev) => {
-        const next = new Set(prev);
-        newOnes.forEach((id) => next.add(id));
-        return next;
-      });
-      const timer = setTimeout(() => {
-        setHighlightIds((prev) => {
-          const next = new Set(prev);
-          newOnes.forEach((id) => next.delete(id));
-          return next;
-        });
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, [tasksQuery.data, seenIds]);
 
   const filteredTasks = useMemo(() => {

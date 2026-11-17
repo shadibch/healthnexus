@@ -2,7 +2,7 @@ import { createContext, useContext, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./api";
 
-export type AppRole = "admin" | "doctor" | "patient" | "pharmacist" | "pharmacy" | "receptionist" | "pending";
+export type AppRole = "admin" | "doctor" | "nurse" | "patient" | "pharmacist" | "pharmacy" | "receptionist" | "accountant" | "pending";
 
 export interface AuthUser {
   userId: number;

@@ -83,8 +83,8 @@ router.get("/prescriptions", requireAuth, async (req, res): Promise<void> => {
 
 router.post("/prescriptions", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (session.roles.includes("patient")) {
-    res.status(403).json({ error: "Patients cannot create prescriptions" });
+  if (!session.roles.includes("doctor")) {
+    res.status(403).json({ error: "Only doctors can create prescriptions" });
     return;
   }
 

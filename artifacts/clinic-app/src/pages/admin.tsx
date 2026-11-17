@@ -332,9 +332,11 @@ function BackupPanel() {
 // ── Main Admin Page ───────────────────────────────────────────────────────────
 const ROLE_COLORS: Record<string, string> = {
   doctor:       "bg-emerald-100 text-emerald-800",
+  nurse:        "bg-rose-100 text-rose-800",
   pharmacist:   "bg-purple-100 text-purple-800",
   pharmacy:     "bg-purple-100 text-purple-800",
   receptionist: "bg-orange-100 text-orange-800",
+  accountant:   "bg-cyan-100 text-cyan-800",
   admin:        "bg-blue-100 text-blue-800",
 };
 
@@ -345,7 +347,7 @@ export default function AdminPage() {
 
   const [createName, setCreateName] = useState("");
   const [createEmail, setCreateEmail] = useState("");
-  const [createRole, setCreateRole] = useState<"doctor" | "pharmacist" | "receptionist">("doctor");
+  const [createRole, setCreateRole] = useState<"doctor" | "nurse" | "pharmacist" | "receptionist" | "accountant">("doctor");
   const [createSpec, setCreateSpec] = useState("");
   const [createPassword, setCreatePassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -452,8 +454,10 @@ export default function AdminPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="doctor">Doctor</SelectItem>
-                  <SelectItem value="pharmacy">Pharmacy</SelectItem>
+                  <SelectItem value="nurse">Nurse</SelectItem>
                   <SelectItem value="receptionist">Receptionist</SelectItem>
+                  <SelectItem value="pharmacist">Pharmacist</SelectItem>
+                  <SelectItem value="accountant">Accountant (Billing)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -564,7 +568,7 @@ export default function AdminPage() {
 
       {/* ── Staff Management ── */}
       {(() => {
-        const ALL_MANAGEABLE = ["admin", "doctor", "receptionist", "pharmacist"] as const;
+        const ALL_MANAGEABLE = ["admin", "doctor", "nurse", "receptionist", "accountant", "pharmacist"] as const;
         return (
           <Card>
             <CardHeader>

@@ -48,20 +48,24 @@ type NavItem = {
 
 const ROLE_DOT: Record<string, string> = {
   doctor:       "bg-emerald-500",
+  nurse:        "bg-rose-500",
   patient:      "bg-blue-500",
   pharmacy:     "bg-purple-500",
   pharmacist:   "bg-purple-500",
   receptionist: "bg-orange-500",
+  accountant:   "bg-cyan-600",
   admin:        "bg-blue-700",
   pending:      "bg-slate-400",
 };
 
 const ROLE_BADGE: Record<string, string> = {
   doctor:       "bg-emerald-100 text-emerald-800",
+  nurse:        "bg-rose-100 text-rose-800",
   patient:      "bg-blue-100 text-blue-800",
   pharmacy:     "bg-purple-100 text-purple-800",
   pharmacist:   "bg-purple-100 text-purple-800",
   receptionist: "bg-orange-100 text-orange-800",
+  accountant:   "bg-cyan-100 text-cyan-800",
   admin:        "bg-blue-100 text-blue-800",
   pending:      "bg-slate-100 text-slate-600",
 };
@@ -107,8 +111,8 @@ function buildNav(
     add({ href: "/admin", label: lang === "ar" ? "إدارة الموظفين" : "Staff & Admin", icon: Building2, badge: 0, badgeVariant: "red" });
   }
 
-  // ── Clinical staff (doctor + receptionist) ─────────────────────────────────
-  if (has("doctor", "receptionist")) {
+  // ── Clinical staff (doctor + nurse + receptionist) ─────────────────────────
+  if (has("doctor", "nurse", "receptionist")) {
     add({ href: "/patients",     label: t("patients"),     icon: Users,        badge: 0,            badgeVariant: "red"   });
     add({ href: "/queue",        label: t("todaysQueue"),  icon: CalendarClock, badge: badges.queue, badgeVariant: "amber" });
     add({ href: "/appointments", label: t("appointments"), icon: CalendarClock, badge: 0,            badgeVariant: "red"   });
@@ -124,13 +128,13 @@ function buildNav(
     add({ href: "/reports",       label: lang === "ar" ? "التقارير" : "Reports",               icon: BarChart2,   badge: 0,                    badgeVariant: "red"   });
   }
 
-  // ── Receptionist-specific (billing if not already added by doctor) ─────────
-  if (has("receptionist") && !has("doctor")) {
+  // ── Billing (receptionist / accountant, if not already added by doctor) ─────
+  if ((has("receptionist") || has("accountant")) && !has("doctor")) {
     add({ href: "/billing", label: t("billing"), icon: ShieldCheck, badge: 0, badgeVariant: "red" });
   }
 
   // ── AI Triage & Dispatch (clinical operations) ─────────────────────────────
-  if (has("doctor", "receptionist", "admin")) {
+  if (has("doctor", "nurse", "receptionist", "admin")) {
     add({ href: "/triage-hub", label: lang === "ar" ? "الفرز الذكي" : "AI Triage & Dispatch", icon: Bot, badge: 0, badgeVariant: "red" });
   }
 
@@ -213,10 +217,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const ROLE_LABELS: Record<string, string> = {
     doctor:       t("doctorView"),
+    nurse:        t("nurseView"),
     patient:      t("patientView"),
     pharmacy:     t("pharmacyView"),
     pharmacist:   t("pharmacyView"),
     receptionist: t("receptionView"),
+    accountant:   t("accountantView"),
     admin:        lang === "ar" ? "مدير النظام" : "Admin",
     pending:      lang === "ar" ? "جاري الإعداد" : "Setting up...",
   };
@@ -225,7 +231,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const ROLE_SHORT: Record<string, string> = {
     admin:        lang === "ar" ? "مدير"    : "Admin",
     doctor:       lang === "ar" ? "طبيب"    : "Doctor",
+    nurse:        lang === "ar" ? "تمريض"   : "Nurse",
     receptionist: lang === "ar" ? "استقبال" : "Reception",
+    accountant:   lang === "ar" ? "محاسبة"  : "Accountant",
     pharmacist:   lang === "ar" ? "صيدلاني" : "Pharmacist",
     pharmacy:     lang === "ar" ? "صيدلية"  : "Pharmacy",
     patient:      lang === "ar" ? "مريض"    : "Patient",

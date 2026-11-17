@@ -1043,7 +1043,7 @@ export default function AppointmentsPage() {
   const qc = useQueryClient();
   const { hasRole } = useRole();
   const isPatient = hasRole("patient");
-  const isStaff = hasRole("doctor") || hasRole("receptionist");
+  const isStaff = hasRole("doctor") || hasRole("nurse") || hasRole("receptionist");
 
   const [bookOpen, setBookOpen] = useState(false);
   const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null);

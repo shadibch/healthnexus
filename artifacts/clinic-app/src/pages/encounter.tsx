@@ -423,6 +423,12 @@ export default function EncounterPage() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const { hasRole } = useRole();
+  const isDoctor = hasRole("doctor");
+  const isNurse = hasRole("nurse");
+  // Nurses may record physical measurements (vitals) and notes; clinical
+  // decisions (diagnosis, treatment plan, prescriptions) stay doctor-only.
+  const canEditVitals = isDoctor || isNurse;
+  const canEditClinical = isDoctor;
   const { lang, isRTL } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -819,16 +825,22 @@ export default function EncounterPage() {
                     ? "انقر للبدء — سيُكشف تلقائياً إذا كانت متابعة لزيارة سابقة خلال 7 أيام"
                     : "Click to start — auto-detected as follow-up if patient visited in the last 7 days"}
                 </p>
-                <Button
-                  size="lg"
-                  onClick={() => createEncounterMutation.mutate()}
-                  disabled={createEncounterMutation.isPending}
-                  className="gap-2"
-                >
-                  {createEncounterMutation.isPending
-                    ? <><Loader2 className="w-4 h-4 animate-spin" />{lang === "ar" ? "جارٍ الإنشاء..." : "Creating..."}</>
-                    : <><Stethoscope className="w-4 h-4" />{lang === "ar" ? "بدء سجل المريض" : "Start Encounter"}</>}
-                </Button>
+                {canEditVitals ? (
+                  <Button
+                    size="lg"
+                    onClick={() => createEncounterMutation.mutate()}
+                    disabled={createEncounterMutation.isPending}
+                    className="gap-2"
+                  >
+                    {createEncounterMutation.isPending
+                      ? <><Loader2 className="w-4 h-4 animate-spin" />{lang === "ar" ? "جارٍ الإنشاء..." : "Creating..."}</>
+                      : <><Stethoscope className="w-4 h-4" />{lang === "ar" ? "بدء سجل المريض" : "Start Encounter"}</>}
+                  </Button>
+                ) : (
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {lang === "ar" ? "فقط الأطباء والممرضون يمكنهم بدء السجل" : "Only doctors and nurses can start an encounter"}
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}
@@ -857,7 +869,7 @@ export default function EncounterPage() {
                     value={vitals}
                     onChange={(e) => setVitals(e.target.value)}
                     placeholder="BP: 120/80 · HR: 75 · Temp: 37°C · SpO2: 98% · RR: 16 · Weight: 70kg"
-                    disabled={isCompleted}
+                    disabled={isCompleted || !canEditVitals}
                     className="font-mono text-sm"
                   />
                 </CardContent>
@@ -880,7 +892,7 @@ export default function EncounterPage() {
                     <select
                       className="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
                       value={visitReason}
-                      disabled={isCompleted}
+                      disabled={isCompleted || !canEditClinical}
                       onChange={(e) => {
                         const val = e.target.value;
                         setVisitReason(val);
@@ -939,39 +951,41 @@ export default function EncounterPage() {
                   <div>
                     <Label className="text-xs font-medium text-muted-foreground">{lang === "ar" ? "الشكوى الرئيسية" : "Chief Complaint"}</Label>
                     <Textarea className="mt-1" rows={2} value={chiefComplaint} onChange={(e) => setChiefComplaint(e.target.value)}
-                      placeholder={lang === "ar" ? "ما يشكو منه المريض..." : "Patient's presenting complaint..."} disabled={isCompleted} />
+                      placeholder={lang === "ar" ? "ما يشكو منه المريض..." : "Patient's presenting complaint..."} disabled={isCompleted || !canEditClinical} />
                   </div>
-                  <AiDiagnosePanel
-                    chiefComplaint={chiefComplaint}
-                    vitals={vitals}
-                    patient={patient ?? undefined}
-                    onAddOrder={(type, name) => {
-                      setPendingOrderType(type);
-                      setPendingOrderName(name);
-                      setAddOrderOpen(true);
-                    }}
-                  />
+                  {canEditClinical && (
+                    <AiDiagnosePanel
+                      chiefComplaint={chiefComplaint}
+                      vitals={vitals}
+                      patient={patient ?? undefined}
+                      onAddOrder={(type, name) => {
+                        setPendingOrderType(type);
+                        setPendingOrderName(name);
+                        setAddOrderOpen(true);
+                      }}
+                    />
+                  )}
 
                   <div>
                     <Label className="text-xs font-medium text-muted-foreground">{lang === "ar" ? "التشخيص" : "Diagnosis"}</Label>
                     <Textarea className="mt-1" rows={2} value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)}
-                      placeholder={lang === "ar" ? "التشخيص / الحالة..." : "Diagnosis / ICD codes..."} disabled={isCompleted} />
+                      placeholder={lang === "ar" ? "التشخيص / الحالة..." : "Diagnosis / ICD codes..."} disabled={isCompleted || !canEditClinical} />
                   </div>
                   <div>
                     <Label className="text-xs font-medium text-muted-foreground">{lang === "ar" ? "خطة العلاج" : "Treatment Plan"}</Label>
                     <Textarea className="mt-1" rows={3} value={treatmentPlan} onChange={(e) => setTreatmentPlan(e.target.value)}
-                      placeholder={lang === "ar" ? "الإجراءات، التحويل، التعليمات..." : "Procedures, referrals, instructions..."} disabled={isCompleted} />
+                      placeholder={lang === "ar" ? "الإجراءات، التحويل، التعليمات..." : "Procedures, referrals, instructions..."} disabled={isCompleted || !canEditClinical} />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <Label className="text-xs font-medium text-muted-foreground">{lang === "ar" ? "ملاحظات" : "Internal Notes"}</Label>
                       <Textarea className="mt-1" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)}
-                        placeholder={lang === "ar" ? "ملاحظات إضافية..." : "Additional notes..."} disabled={isCompleted} />
+                        placeholder={lang === "ar" ? "ملاحظات إضافية..." : "Additional notes..."} disabled={isCompleted || !canEditVitals} />
                     </div>
                     <div>
                       <Label className="text-xs font-medium text-muted-foreground">{lang === "ar" ? "موعد المتابعة" : "Follow-up Date"}</Label>
                       <Input className="mt-1" type="date" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)}
-                        disabled={isCompleted} dir="ltr" />
+                        disabled={isCompleted || !canEditClinical} dir="ltr" />
                     </div>
                   </div>
                 </CardContent>
@@ -1109,25 +1123,27 @@ export default function EncounterPage() {
                     </div>
                   )}
 
-                  <AiPrescriptionPanel
-                    diagnosis={diagnosis}
-                    chiefComplaint={chiefComplaint}
-                    patient={patient ?? undefined}
-                    currentRxItems={rxItems.map(r => ({
-                      name: r.medication.genericName ?? r.medication.name,
-                      dosage: r.dosage,
-                      frequency: r.frequency,
-                      duration: r.duration,
-                    }))}
-                    onAddMedication={(med) => {
-                      setRxDosage(med.dosage);
-                      setRxFrequency(med.frequency);
-                      setRxDuration(med.duration);
-                    }}
-                  />
+                  {canEditClinical && (
+                    <AiPrescriptionPanel
+                      diagnosis={diagnosis}
+                      chiefComplaint={chiefComplaint}
+                      patient={patient ?? undefined}
+                      currentRxItems={rxItems.map(r => ({
+                        name: r.medication.genericName ?? r.medication.name,
+                        dosage: r.dosage,
+                        frequency: r.frequency,
+                        duration: r.duration,
+                      }))}
+                      onAddMedication={(med) => {
+                        setRxDosage(med.dosage);
+                        setRxFrequency(med.frequency);
+                        setRxDuration(med.duration);
+                      }}
+                    />
+                  )}
 
                   {/* Builder — only shown when encounter is open */}
-                  {!isCompleted && (
+                  {!isCompleted && canEditClinical && (
                     <>
                       {/* Medication autocomplete row */}
                       <div className="space-y-2">
@@ -1299,7 +1315,7 @@ export default function EncounterPage() {
                       {lang === "ar" ? "الطلبات الطبية" : "Medical Orders"}
                       {encounter?.orders.length ? <Badge variant="secondary" className="text-xs">{encounter.orders.length}</Badge> : null}
                     </CardTitle>
-                    {!isCompleted && (
+                    {!isCompleted && canEditClinical && (
                       <Button size="sm" variant="outline" onClick={() => setAddOrderOpen(true)} className="gap-1 text-xs">
                         <Plus className="w-3.5 h-3.5" />{lang === "ar" ? "إضافة طلب" : "Add Order"}
                       </Button>
@@ -1431,13 +1447,13 @@ export default function EncounterPage() {
                   activityTotal={0}
                   lang={lang}
                   isRTL={isRTL}
-                  canEdit={hasRole("receptionist") || hasRole("doctor")}
+                  canEdit={hasRole("receptionist") || hasRole("doctor") || hasRole("accountant")}
                   queryKey={["encounter", activeEncounterId]}
                 />
               )}
 
               {/* Action buttons */}
-              {!isCompleted && (
+              {!isCompleted && canEditVitals && (
                 <div className={cn("flex items-center gap-3", isRTL && "flex-row-reverse")}>
                   <Button
                     variant="outline"
@@ -1448,16 +1464,18 @@ export default function EncounterPage() {
                     {saveEncounterMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                     {lang === "ar" ? "حفظ" : "Save"}
                   </Button>
-                  <Button
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 gap-1"
-                    onClick={() => completeEncounterMutation.mutate()}
-                    disabled={completeEncounterMutation.isPending}
-                  >
-                    {completeEncounterMutation.isPending
-                      ? <Loader2 className="w-4 h-4 animate-spin" />
-                      : <CheckCircle2 className="w-4 h-4" />}
-                    {lang === "ar" ? "إنهاء وإغلاق السجل" : "Complete & Close Encounter"}
-                  </Button>
+                  {isDoctor && (
+                    <Button
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 gap-1"
+                      onClick={() => completeEncounterMutation.mutate()}
+                      disabled={completeEncounterMutation.isPending}
+                    >
+                      {completeEncounterMutation.isPending
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <CheckCircle2 className="w-4 h-4" />}
+                      {lang === "ar" ? "إنهاء وإغلاق السجل" : "Complete & Close Encounter"}
+                    </Button>
+                  )}
                 </div>
               )}
               {isCompleted && (
