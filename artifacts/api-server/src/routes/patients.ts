@@ -71,7 +71,12 @@ router.post("/patients", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [patient] = await getDb().insert(patientsTable).values(parsed.data).returning();
+  // Stamp the clinic so staff in the same medical center can open the record
+  // (the tenant schema isolates data, but the same-center guard compares this).
+  const [patient] = await getDb().insert(patientsTable).values({
+    ...parsed.data,
+    medicalCenterId: session.medicalCenterId ?? null,
+  }).returning();
   res.status(201).json(patient);
 });
 
