@@ -34,15 +34,22 @@ Session-based auth via `express-session` + `SESSION_SECRET` env var.
 |---|---|---|---|
 | doctor@clinicflow.ae | doctor123 | doctor | doctorDbId=1 |
 | patient@clinicflow.ae | patient123 | patient | patientDbId=1 |
+| nurse@clinicflow.ae | nurse123 | nurse | — |
 | pharmacy@clinicflow.ae | pharmacy123 | pharmacy | — |
+| pharmacist@clinicflow.ae | pharmacist123 | pharmacist | — |
 | reception@clinicflow.ae | reception123 | receptionist | — |
+| billing@clinicflow.ae | billing123 | accountant | — |
+| operator@clinicflow.ae | operator123 | operator | — |
 
 ### Auth Middleware
 - `artifacts/api-server/src/lib/session.ts` — `getSessionUser()`, `requireAuth()`, `requireRole()`
 - All routes require `requireAuth` middleware — unauthenticated → 401
 - **Doctor**: sees only their own queue/appointments/consultations/prescriptions (filtered by `doctorDbId`)
+- **Nurse**: clinical staff access; can read/write encounter vitals and notes (encounters are attributed to the appointment's doctor)
 - **Patient**: sees only their own data (filtered by `patientDbId`); cannot create appointments or modify records
-- **Pharmacy**: sees all prescriptions (pending/dispensed), manages stock
+- **Pharmacy / Pharmacist**: sees all prescriptions (pending/dispensed), manages stock
+- **Accountant**: billing access — view claims and record payments (`/billing`)
+- **Operator**: single job — forward triage tickets the automation could not route to a department/person (`/triage-forward`)
 
 ## API Routes (all prefixed `/api`, all require auth)
 

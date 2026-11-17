@@ -89,10 +89,14 @@ Copy `.env.example` → `.env` and fill in what you need. Most are optional.
 
 | Email | Password | Role |
 |---|---|---|
-| doctor@clinicflow.ae | doctor123 | doctor |
+| admin@clinicflow.ae | Admin@12345 | admin |
+| doctor@clinicflow.ae | Doctor@123 | doctor |
+| nurse@clinicflow.ae | Nurse@123 | nurse |
+| reception@clinicflow.ae | Reception@123 | receptionist |
+| billing@clinicflow.ae | Billing@123 | accountant (billing) |
+| pharmacist@clinicflow.ae | Pharma@123 | pharmacist |
+| operator@clinicflow.ae | Operator@123 | operator (ticket forwarding) |
 | patient@clinicflow.ae | patient123 | patient |
-| pharmacy@clinicflow.ae | pharmacy123 | pharmacy |
-| reception@clinicflow.ae | reception123 | receptionist |
 
 ---
 
