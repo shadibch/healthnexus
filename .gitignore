@@ -53,3 +53,5 @@ Thumbs.db
 .env.bak
 .env.local
 .env.*.local
+.prisma-composer/
+.alchemy/

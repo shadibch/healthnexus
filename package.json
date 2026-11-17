@@ -10,7 +10,23 @@
   },
   "private": true,
   "devDependencies": {
-    "typescript": "~5.9.2",
-    "prettier": "^3.8.1"
+    "prettier": "^3.8.1",
+    "prisma": "8.0.0-rc.33",
+    "typescript": "~5.9.2"
+  },
+  "dependencies": {
+    "@prisma/composer": "0.38.0",
+    "@prisma/composer-prisma-cloud": "0.38.0",
+    "@prisma/orm-postgres": "8.0.0-rc.23",
+    "effect": "4.0.5"
+  },
+  "pnpm": {
+    "overrides": {
+      "@effect/platform-bun": "4.0.5",
+      "@effect/platform-node": "4.0.5",
+      "@effect/platform-node-shared": "4.0.5",
+      "@effect/vitest": "4.0.5",
+      "effect": "4.0.5"
+    }
   }
 }
