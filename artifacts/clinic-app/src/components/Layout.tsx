@@ -30,6 +30,7 @@ import {
   X,
   FileSearch,
   MessageSquare,
+  Bot,
 } from "lucide-react";
 import { useClinicSettings } from "@/lib/clinic-settings";
 import { Button } from "@/components/ui/button";
@@ -126,6 +127,11 @@ function buildNav(
   // ── Receptionist-specific (billing if not already added by doctor) ─────────
   if (has("receptionist") && !has("doctor")) {
     add({ href: "/billing", label: t("billing"), icon: ShieldCheck, badge: 0, badgeVariant: "red" });
+  }
+
+  // ── AI Triage & Dispatch (clinical operations) ─────────────────────────────
+  if (has("doctor", "receptionist", "admin")) {
+    add({ href: "/triage-hub", label: lang === "ar" ? "الفرز الذكي" : "AI Triage & Dispatch", icon: Bot, badge: 0, badgeVariant: "red" });
   }
 
   // ── Pharmacy ───────────────────────────────────────────────────────────────

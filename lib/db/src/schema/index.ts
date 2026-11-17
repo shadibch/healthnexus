@@ -20,3 +20,4 @@ export * from "./reminder-configs";
 export * from "./reminder-logs";
 export * from "./conversations";
 export * from "./messages";
+export * from "./clinic-tasks";

@@ -9,6 +9,7 @@ export async function runStartupSeed(): Promise<void> {
   await seedPharmacies();
   await seedDoctorCoords();
   await seedFeeSchedule();
+  await seedClinicTasks();
   logger.info("Startup seed complete.");
 }
 
@@ -368,4 +369,35 @@ async function seedFeeSchedule(): Promise<void> {
     ON CONFLICT DO NOTHING
   `);
   logger.info("Default fee schedule seeded.");
+}
+
+// ── AI Triage demo tasks ───────────────────────────────────────────────────────
+// Idempotent demo data for the /triage-hub dashboard. Keyed on the unique
+// external_event_id, so re-runs (and the Make.com callback) never duplicate.
+async function seedClinicTasks(): Promise<void> {
+  const res = await db.execute<{ count: string }>(
+    sql`SELECT count(*)::text AS count FROM clinic_tasks`
+  );
+  if (parseInt(res.rows[0].count) > 0) {
+    logger.info("Clinic triage tasks already seeded, skipping.");
+    return;
+  }
+  logger.info("Seeding AI triage demo tasks…");
+  await db.execute(sql`
+    INSERT INTO clinic_tasks
+      (external_event_id, task_title, requestor_role, department, priority, status, patient_identifier, assigned_person, original_message, created_at)
+    VALUES
+      ('seed_evt_0001', 'Urgent MRI pre-approval — file #9921', 'Nurse', 'Doctor', 'Critical', 'Open', '9921', 'Dr. Khaled', 'Dr. Khaled, urgent MRI pre-approval needed for patient file #9921 before noon.', now() - interval '3 minutes'),
+      ('seed_evt_0002', 'Pediatric follow-up booking — file #9921', 'Patient', 'Reception', 'Medium', 'Open', '9921', 'Dr. Khaled', 'Hi, I need to book a pediatric follow-up with Dr. Khaled tomorrow at 5 PM for file #9921.', now() - interval '6 minutes'),
+      ('seed_evt_0003', 'Insurance claim rejected — resubmit', 'Nurse', 'Billing', 'High', 'In Progress', 'PAT-8830', 'Fatima (Billing)', 'Claim for PAT-8830 was rejected by the insurer due to a missing pre-authorization code.', now() - interval '14 minutes'),
+      ('seed_evt_0004', 'Refill request: Metformin 500mg', 'Patient', 'Pharmacy', 'Low', 'Open', '7712', 'Omar (Pharmacy)', 'Please refill my Metformin 500mg prescription, I have 2 days left.', now() - interval '22 minutes'),
+      ('seed_evt_0005', 'Lab printer offline in treatment room 2', 'Nurse', 'IT', 'Medium', 'Open', NULL, 'IT Support', 'The lab label printer in treatment room 2 is offline and blocking sample processing.', now() - interval '31 minutes'),
+      ('seed_evt_0006', 'Wheelchair request for elderly patient', 'Manager', 'Reception', 'Low', 'Resolved', '5540', 'Reception Desk', 'Please arrange a wheelchair for the elderly patient arriving at 4 PM.', now() - interval '48 minutes'),
+      ('seed_evt_0007', 'Vendor invoice mismatch — 2 items', 'Vendor', 'Billing', 'High', 'Pending Registration', NULL, 'Accounts', 'Invoice INV-2291 lists 2 items that do not match our purchase order.', now() - interval '1 hour'),
+      ('seed_evt_0008', 'Allergy alert missing from chart', 'Doctor', 'Doctor', 'High', 'In Progress', '9921', 'Dr. Khaled', 'Patient file #9921 has a known penicillin allergy that is not flagged in the chart.', now() - interval '1 hour 12 minutes'),
+      ('seed_evt_0009', 'Blood pressure cuff calibration due', 'Nurse', 'IT', 'Medium', 'Open', NULL, 'Biomedical', 'The BP cuff in consulting room 1 is due for calibration this week.', now() - interval '2 hours'),
+      ('seed_evt_0010', 'Radiology report pending for file #9921', 'Doctor', 'Doctor', 'Critical', 'Open', '9921', 'Dr. Khaled', 'Radiology report for file #9921 is still pending; patient is waiting for the result.', now() - interval '2 hours 20 minutes')
+    ON CONFLICT (external_event_id) DO NOTHING
+  `);
+  logger.info("AI triage demo tasks seeded (10 rows).");
 }
