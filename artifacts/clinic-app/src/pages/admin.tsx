@@ -337,6 +337,7 @@ const ROLE_COLORS: Record<string, string> = {
   pharmacy:     "bg-purple-100 text-purple-800",
   receptionist: "bg-orange-100 text-orange-800",
   accountant:   "bg-cyan-100 text-cyan-800",
+  operator:     "bg-amber-100 text-amber-800",
   admin:        "bg-blue-100 text-blue-800",
 };
 
@@ -347,7 +348,7 @@ export default function AdminPage() {
 
   const [createName, setCreateName] = useState("");
   const [createEmail, setCreateEmail] = useState("");
-  const [createRole, setCreateRole] = useState<"doctor" | "nurse" | "pharmacist" | "receptionist" | "accountant">("doctor");
+  const [createRole, setCreateRole] = useState<"doctor" | "nurse" | "pharmacist" | "receptionist" | "accountant" | "operator">("doctor");
   const [createSpec, setCreateSpec] = useState("");
   const [createPassword, setCreatePassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -458,6 +459,7 @@ export default function AdminPage() {
                   <SelectItem value="receptionist">Receptionist</SelectItem>
                   <SelectItem value="pharmacist">Pharmacist</SelectItem>
                   <SelectItem value="accountant">Accountant (Billing)</SelectItem>
+                  <SelectItem value="operator">Operator (Ticket Forwarding)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -568,7 +570,7 @@ export default function AdminPage() {
 
       {/* ── Staff Management ── */}
       {(() => {
-        const ALL_MANAGEABLE = ["admin", "doctor", "nurse", "receptionist", "accountant", "pharmacist"] as const;
+        const ALL_MANAGEABLE = ["admin", "doctor", "nurse", "receptionist", "accountant", "operator", "pharmacist"] as const;
         return (
           <Card>
             <CardHeader>

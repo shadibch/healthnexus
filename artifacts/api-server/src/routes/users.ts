@@ -12,7 +12,7 @@ import { z } from "zod";
 
 const router: IRouter = Router();
 
-const STAFF_ROLES = ["admin", "doctor", "nurse", "receptionist", "accountant", "pharmacist", "pharmacy"] as const;
+const STAFF_ROLES = ["admin", "doctor", "nurse", "receptionist", "accountant", "operator", "pharmacist", "pharmacy"] as const;
 type StaffRole = (typeof STAFF_ROLES)[number];
 
 router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
@@ -61,7 +61,7 @@ router.post("/users/onboarding/role", requireAuth, async (req, res): Promise<voi
     roles = [rawRole];
   }
 
-  const validRoles = ["admin", "patient", "doctor", "nurse", "receptionist", "accountant", "pharmacist", "pharmacy"];
+  const validRoles = ["admin", "patient", "doctor", "nurse", "receptionist", "accountant", "operator", "pharmacist", "pharmacy"];
   const invalid = roles.find(r => !validRoles.includes(r));
   if (invalid || roles.length === 0) {
     res.status(400).json({ error: "Invalid role(s)" });
@@ -208,7 +208,7 @@ router.post("/users/onboarding/patient", requireAuth, async (req, res): Promise<
 const CreateStaffBody = z.object({
   name: z.string().min(2),
   email: z.string().email(),
-  role: z.enum(["doctor", "nurse", "pharmacist", "receptionist", "accountant"]),
+  role: z.enum(["doctor", "nurse", "pharmacist", "receptionist", "accountant", "operator"]),
   tempPassword: z.string().min(8),
   specialization: z.string().optional(),
 });
@@ -281,7 +281,7 @@ router.post("/users/create-staff", requireAuth, async (req, res): Promise<void> 
 // ── POST /users/invite-staff (kept for backward compat) ───────────────────────
 const InviteStaffBody = z.object({
   email: z.string().email(),
-  role: z.enum(["doctor", "nurse", "pharmacist", "receptionist", "accountant"]),
+  role: z.enum(["doctor", "nurse", "pharmacist", "receptionist", "accountant", "operator"]),
 });
 
 router.post("/users/invite-staff", requireAuth, async (req, res): Promise<void> => {
@@ -370,7 +370,7 @@ router.get("/users/staff", requireAuth, async (req, res): Promise<void> => {
 });
 
 // ── PATCH /users/:id/roles ────────────────────────────────────────────────────
-const MANAGEABLE_ROLES = ["admin", "doctor", "nurse", "receptionist", "accountant", "pharmacist", "pharmacy"] as const;
+const MANAGEABLE_ROLES = ["admin", "doctor", "nurse", "receptionist", "accountant", "operator", "pharmacist", "pharmacy"] as const;
 
 router.patch("/users/:id/roles", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;

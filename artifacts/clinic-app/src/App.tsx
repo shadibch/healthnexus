@@ -36,6 +36,7 @@ import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
 import FeedbackPage from "@/pages/feedback";
 import TriageHubPage from "@/pages/triage-hub";
+import TriageForwardPage from "@/pages/triage-forward";
 import NotFound from "@/pages/not-found";
 import { Stethoscope, Loader2, LogIn, UserPlus, Eye, EyeOff, MailCheck } from "lucide-react";
 
@@ -47,6 +48,10 @@ const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function rootPage(roles: string[]) {
   const has = (...rs: string[]) => rs.some(r => roles.includes(r));
+  // Pure operator (only job: forward unrouted tickets) → forwarding workspace
+  if (has("operator") && !has("admin", "doctor", "nurse", "receptionist", "accountant", "pharmacist", "pharmacy", "patient")) {
+    return <TriageForwardPage />;
+  }
   // Pure receptionist / nurse (not also a doctor) → reception-focused home
   if ((has("receptionist") || has("nurse")) && !has("doctor", "admin")) return <ReceptionPage />;
   // Pure accountant (not also a doctor/admin) → billing home
@@ -430,6 +435,7 @@ function AppRoutes() {
           <Route path="/search-encounters" component={SearchEncountersPage} />
           <Route path="/admin" component={AdminPage} />
           <Route path="/triage-hub" component={TriageHubPage} />
+          <Route path="/triage-forward" component={TriageForwardPage} />
           <Route path="/feedback" component={FeedbackPage} />
           <Route component={NotFound} />
         </Switch>

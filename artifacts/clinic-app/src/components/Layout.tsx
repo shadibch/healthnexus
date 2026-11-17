@@ -31,6 +31,7 @@ import {
   FileSearch,
   MessageSquare,
   Bot,
+  Forward,
 } from "lucide-react";
 import { useClinicSettings } from "@/lib/clinic-settings";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,7 @@ const ROLE_DOT: Record<string, string> = {
   pharmacist:   "bg-purple-500",
   receptionist: "bg-orange-500",
   accountant:   "bg-cyan-600",
+  operator:     "bg-amber-500",
   admin:        "bg-blue-700",
   pending:      "bg-slate-400",
 };
@@ -66,6 +68,7 @@ const ROLE_BADGE: Record<string, string> = {
   pharmacist:   "bg-purple-100 text-purple-800",
   receptionist: "bg-orange-100 text-orange-800",
   accountant:   "bg-cyan-100 text-cyan-800",
+  operator:     "bg-amber-100 text-amber-800",
   admin:        "bg-blue-100 text-blue-800",
   pending:      "bg-slate-100 text-slate-600",
 };
@@ -102,6 +105,19 @@ function buildNav(
       items.push(item);
     }
   };
+
+  // ── Operator (ticket forwarding only) ──────────────────────────────────────
+  // The Operator has exactly one job: forward tickets the automation could not
+  // route to a department. Scope their nav to that single workspace.
+  const pureOperator = has("operator") && !has(
+    "admin", "doctor", "nurse", "receptionist", "accountant", "pharmacist", "pharmacy", "patient",
+  );
+  if (pureOperator) {
+    add({ href: "/triage-forward", label: lang === "ar" ? "توجيه التذاكر" : "Ticket Forwarding", icon: Forward, badge: 0, badgeVariant: "red" });
+    add({ href: "/settings", label: lang === "ar" ? "الإعدادات والدعم" : "Settings & Support", icon: Settings, badge: 0, badgeVariant: "red" });
+    add({ href: "/feedback", label: lang === "ar" ? "أرسل ملاحظاتك" : "Send your feedback", icon: MessageSquare, badge: 0, badgeVariant: "red" });
+    return items;
+  }
 
   // ── Dashboard (always) ─────────────────────────────────────────────────────
   add({ href: "/", label: t("dashboard"), icon: LayoutDashboard, badge: 0, badgeVariant: "red" });
@@ -223,6 +239,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     pharmacist:   t("pharmacyView"),
     receptionist: t("receptionView"),
     accountant:   t("accountantView"),
+    operator:     t("operatorView"),
     admin:        lang === "ar" ? "مدير النظام" : "Admin",
     pending:      lang === "ar" ? "جاري الإعداد" : "Setting up...",
   };
@@ -234,6 +251,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     nurse:        lang === "ar" ? "تمريض"   : "Nurse",
     receptionist: lang === "ar" ? "استقبال" : "Reception",
     accountant:   lang === "ar" ? "محاسبة"  : "Accountant",
+    operator:     lang === "ar" ? "مُوجِّه"  : "Operator",
     pharmacist:   lang === "ar" ? "صيدلاني" : "Pharmacist",
     pharmacy:     lang === "ar" ? "صيدلية"  : "Pharmacy",
     patient:      lang === "ar" ? "مريض"    : "Patient",

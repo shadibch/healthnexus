@@ -12,15 +12,17 @@ export type AppRole =
   | "pharmacy"
   | "receptionist"
   | "accountant"
+  | "operator"
   | "pending";
 
 // Priority order for selecting the "primary" display role
 const ROLE_PRIORITY: Record<string, number> = {
-  admin:        8,
-  doctor:       7,
-  nurse:        6,
-  receptionist: 5,
-  accountant:   4,
+  admin:        9,
+  doctor:       8,
+  nurse:        7,
+  receptionist: 6,
+  accountant:   5,
+  operator:     4,
   pharmacist:   3,
   pharmacy:     2,
   patient:      1,
