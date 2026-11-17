@@ -129,16 +129,15 @@ async function sendViaSmtp(opts: EmailProviderOptions): Promise<void> {
 }
 
 /**
- * True when a real email provider is configured. When false (e.g. a demo /
- * self-hosted deployment without SMTP), accounts are activated immediately
- * because verification emails can never be delivered.
+ * Whether new accounts must confirm their email before signing in.
+ *
+ * Defaults to OFF because verification links can never be delivered on hosts
+ * that block outbound SMTP (e.g. the Render free tier), which would otherwise
+ * lock every account out of the system. Set REQUIRE_EMAIL_VERIFICATION=true on
+ * deployments that have a working email provider.
  */
-export function isEmailConfigured(): boolean {
-  return Boolean(
-    (process.env.HOSTINGER_MAIL_API_TOKEN && process.env.HOSTINGER_MAILBOX_ID) ||
-      process.env.RESEND_API_KEY ||
-      process.env.SMTP_HOST,
-  );
+export function isEmailVerificationRequired(): boolean {
+  return process.env.REQUIRE_EMAIL_VERIFICATION === "true";
 }
 
 /**

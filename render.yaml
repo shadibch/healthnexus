@@ -33,6 +33,11 @@ services:
         generateValue: true
       - key: NODE_ENV
         value: production
+      # Require email confirmation before sign-in. Left false because the free
+      # tier blocks outbound SMTP and cannot deliver verification links; set to
+      # "true" once a working email provider (Hostinger Mail API / Resend) is set.
+      - key: REQUIRE_EMAIL_VERIFICATION
+        value: "false"
       # Public URL used in verification / password-reset email links.
       # Replace with the final production URL (e.g. https://healthnexus.onrender.com)
       - key: APP_BASE_URL

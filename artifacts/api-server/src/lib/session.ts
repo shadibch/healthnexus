@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { db } from "@workspace/db";
 import { usersTable, doctorsTable, patientsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { isEmailVerificationRequired } from "./email-provider";
 export type AppRole =
   | "admin"
   | "doctor"
@@ -102,7 +103,9 @@ export async function resolveSessionUser(userId: number): Promise<SessionUser | 
     patientDbId: null,
     aiAssistantEnabled: user.aiAssistantEnabled,
     subscriptionPlan: user.subscriptionPlan,
-    emailVerified: user.emailVerified,
+    // Verification is only enforced when explicitly enabled; otherwise every
+    // account is treated as active so the system stays usable without email.
+    emailVerified: user.emailVerified || !isEmailVerificationRequired(),
     mustChangePassword: user.mustChangePassword,
     deactivated: user.deactivated,
   };

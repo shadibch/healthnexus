@@ -5,7 +5,7 @@ import { usersTable, staffInvitesTable } from "@workspace/db";
 import { getSessionUser, requireAuth, startSession, destroySession, resolveSessionUser } from "../lib/session";
 import { hashPassword, verifyPassword } from "../lib/password";
 import { sendEmail } from "../lib/mailer";
-import { isEmailConfigured } from "../lib/email-provider";
+import { isEmailVerificationRequired } from "../lib/email-provider";
 import {
   createEmailVerification,
   createPasswordResetToken,
@@ -79,10 +79,10 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 
   const assignedRole = invite ? invite.role : "pending";
 
-  // Without a configured email provider, verification links can never be
-  // delivered — activate the account immediately so it stays usable (demo /
-  // self-hosted deployments).
-  const emailConfigured = isEmailConfigured();
+  // Without an enforced verification policy, verification links can never be
+  // delivered on some hosts — activate the account immediately so it stays
+  // usable (demo / self-hosted deployments).
+  const emailVerified = !isEmailVerificationRequired();
 
   const [created] = await getDb().insert(usersTable)
     .values({
@@ -93,7 +93,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
       roles: invite ? [invite.role] : [],
       medicalCenterId: invite ? invite.medicalCenterId : null,
       onboardingComplete: false,
-      emailVerified: !emailConfigured,
+      emailVerified,
     })
     .returning();
 
@@ -103,32 +103,35 @@ router.post("/auth/register", async (req, res): Promise<void> => {
       .where(eq(staffInvitesTable.id, invite.id));
   }
 
-  // Email verification — send failure must not block the account creation
-  try {
-    const verification = await createEmailVerification(created.id);
-    const verifyUrl = `${appBaseUrl(req)}/verify-email?token=${verification.linkToken}`;
+  // Email verification — send failure must not block the account creation.
+  // Skipped entirely when verification is not enforced.
+  if (isEmailVerificationRequired()) {
+    try {
+      const verification = await createEmailVerification(created.id);
+      const verifyUrl = `${appBaseUrl(req)}/verify-email?token=${verification.linkToken}`;
 
-    await sendEmail({
-      to: created.email,
-      subject: "Verify your email — HealthNexus",
-      text:
-        `Welcome to HealthNexus!\n\n` +
-        `Please verify your email address to activate your account.\n\n` +
-        `Open this link to verify (valid for ${EMAIL_VERIFICATION_TTL_MINUTES} minutes):\n${verifyUrl}\n\n` +
-        `Or enter this code in the app:\n${verification.otpCode}\n\n` +
-        `If you didn't create an account, you can safely ignore this email.`,
-      html:
-        `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px;">` +
-        `<h2 style="color:#0f172a;margin:0 0 8px;">Verify your email</h2>` +
-        `<p style="color:#475569;line-height:1.6;">Welcome to HealthNexus! Please verify your email address to activate your account.</p>` +
-        `<p style="margin:20px 0;"><a href="${verifyUrl}" style="background:#059669;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block;">Verify Email</a></p>` +
-        `<p style="color:#64748b;font-size:13px;line-height:1.6;">Or enter this code in the app:<br/><strong style="font-size:18px;letter-spacing:3px;color:#0f172a;">${verification.otpCode}</strong></p>` +
-        `<p style="color:#94a3b8;font-size:12px;margin-top:24px;">This link is valid for ${EMAIL_VERIFICATION_TTL_MINUTES} minutes. If you didn't create an account, you can safely ignore this email.</p>` +
-        `</div>`,
-    });
-    logger.info({ userId: created.id, email: created.email }, "verification email sent on register");
-  } catch (err) {
-    logger.error({ err, userId: created.id }, "failed to send verification email (account created anyway)");
+      await sendEmail({
+        to: created.email,
+        subject: "Verify your email — HealthNexus",
+        text:
+          `Welcome to HealthNexus!\n\n` +
+          `Please verify your email address to activate your account.\n\n` +
+          `Open this link to verify (valid for ${EMAIL_VERIFICATION_TTL_MINUTES} minutes):\n${verifyUrl}\n\n` +
+          `Or enter this code in the app:\n${verification.otpCode}\n\n` +
+          `If you didn't create an account, you can safely ignore this email.`,
+        html:
+          `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px;">` +
+          `<h2 style="color:#0f172a;margin:0 0 8px;">Verify your email</h2>` +
+          `<p style="color:#475569;line-height:1.6;">Welcome to HealthNexus! Please verify your email address to activate your account.</p>` +
+          `<p style="margin:20px 0;"><a href="${verifyUrl}" style="background:#059669;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block;">Verify Email</a></p>` +
+          `<p style="color:#64748b;font-size:13px;line-height:1.6;">Or enter this code in the app:<br/><strong style="font-size:18px;letter-spacing:3px;color:#0f172a;">${verification.otpCode}</strong></p>` +
+          `<p style="color:#94a3b8;font-size:12px;margin-top:24px;">This link is valid for ${EMAIL_VERIFICATION_TTL_MINUTES} minutes. If you didn't create an account, you can safely ignore this email.</p>` +
+          `</div>`,
+      });
+      logger.info({ userId: created.id, email: created.email }, "verification email sent on register");
+    } catch (err) {
+      logger.error({ err, userId: created.id }, "failed to send verification email (account created anyway)");
+    }
   }
 
   startSession(req, created.id);
@@ -165,7 +168,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     res.status(403).json({ error: "ACCOUNT_DEACTIVATED" });
     return;
   }
-  if (!user.emailVerified) {
+  if (!user.emailVerified && isEmailVerificationRequired()) {
     res.status(403).json({ error: "ACCOUNT_NOT_VERIFIED", userId: user.id });
     return;
   }
