@@ -4,7 +4,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { z } from "zod/v4";
 import { clinicTasksTable } from "@workspace/db";
 import { getDb } from "../lib/tenant";
-import { requireAuth } from "../lib/session";
+import { getSessionUser, requireAuth } from "../lib/session";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -15,9 +15,7 @@ const DEPARTMENTS = ["Reception", "Doctor", "Pharmacy", "Billing", "IT"] as cons
 const PRIORITIES = ["Low", "Medium", "High", "Critical"] as const;
 
 const dispatchSchema = z.object({
-  sender: z.string().min(1),
-  requestor_role: z.enum(["Patient", "Nurse", "Doctor", "Manager", "Vendor"]),
-  message: z.string().min(1),
+  message: z.string().trim().min(1),
 });
 
 const taskCallbackSchema = z.object({
@@ -50,8 +48,10 @@ const patchTaskSchema = z.object({
   { message: "At least one field must be provided" },
 );
 
-function generateEventId(): string {
-  return `evt_cams_${Date.now()}_${crypto.randomUUID().slice(0, 6)}`;
+function generateEventId(message: string): string {
+  const date = new Date().toISOString().slice(0, 10).replaceAll("-", "_");
+  const messageHash = crypto.createHash("sha256").update(message).digest("hex").slice(0, 12);
+  return `evt_cams_${date}_${messageHash}`;
 }
 
 router.post("/triage/dispatch", requireAuth, async (req, res): Promise<void> => {
@@ -61,15 +61,17 @@ router.post("/triage/dispatch", requireAuth, async (req, res): Promise<void> => 
     return;
   }
 
-  const { sender, requestor_role, message } = parsed.data;
-  const event_id = generateEventId();
-  const timestamp = new Date().toISOString();
+  const user = getSessionUser(req)!;
+  const { message } = parsed.data;
+  const sender = user.email;
+  const requestor_role = user.role.charAt(0).toUpperCase() + user.role.slice(1);
+  const event_id = generateEventId(message);
 
   try {
     const response = await fetch(MAKE_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event_id, sender, requestor_role, timestamp, message }),
+      body: JSON.stringify({ sender, requestor_role, event_id, message }),
       signal: AbortSignal.timeout(10_000),
     });
 

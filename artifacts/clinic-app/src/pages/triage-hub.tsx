@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Send, Bot, User, Stethoscope, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
 
-type RequestorRole = "Patient" | "Nurse" | "Doctor" | "Manager" | "Vendor";
+type RequestorRole = string;
 type Department = "Reception" | "Doctor" | "Pharmacy" | "Billing" | "IT";
 type Priority = "Low" | "Medium" | "High" | "Critical";
 type TaskStatus = "Open" | "In Progress" | "Pending Registration" | "Resolved";
@@ -39,9 +39,6 @@ interface DispatchedMessage {
   status: "dispatching" | "sent" | "error";
   error?: string;
 }
-
-const NURSE_SENDER = "nurse.amira@camsclinic.org";
-const PATIENT_SENDER = "patient@example.com";
 
 const SAMPLE_PROMPTS = [
   "Dr. Khaled, urgent MRI pre-approval needed for patient file #9921 before noon.",
@@ -83,10 +80,10 @@ function statusBadgeClass(status: TaskStatus) {
 
 export default function TriageHubPage() {
   const { lang, isRTL } = useI18n();
+  const { user } = useAuth();
   const qc = useQueryClient();
 
   // Left panel state
-  const [roleTab, setRoleTab] = useState<"Nurse" | "Patient">("Nurse");
   const [message, setMessage] = useState("");
   const [feed, setFeed] = useState<DispatchedMessage[]>([]);
   const feedEndRef = useRef<HTMLDivElement>(null);
@@ -98,7 +95,8 @@ export default function TriageHubPage() {
   const [highlightIds, setHighlightIds] = useState<Set<number>>(new Set());
   const initializedRef = useRef(false);
 
-  const sender = roleTab === "Nurse" ? NURSE_SENDER : PATIENT_SENDER;
+  const sender = user?.email ?? "";
+  const requestorRole = user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : "Pending";
 
   const tasksQuery = useQuery<ClinicTask[]>({
     queryKey: ["triage-tasks"],
@@ -107,12 +105,10 @@ export default function TriageHubPage() {
   });
 
   const dispatchMutation = useMutation({
-    mutationFn: async (payload: { localId: string; sender: string; requestor_role: RequestorRole; message: string }) => {
+    mutationFn: async (payload: { localId: string; message: string }) => {
       const res = await apiFetch<{ success: boolean; event_id: string }>("/triage/dispatch", {
         method: "POST",
         body: JSON.stringify({
-          sender: payload.sender,
-          requestor_role: payload.requestor_role,
           message: payload.message,
         }),
       });
@@ -189,14 +185,14 @@ export default function TriageHubPage() {
       id: localId,
       eventId: "",
       sender,
-      requestorRole: roleTab,
+      requestorRole,
       message: text,
       timestamp: new Date().toISOString(),
       status: "dispatching",
     };
     setFeed((prev) => [...prev, item]);
     setMessage("");
-    dispatchMutation.mutate({ localId, sender, requestor_role: roleTab, message: text });
+    dispatchMutation.mutate({ localId, message: text });
   }
 
   return (
@@ -227,20 +223,9 @@ export default function TriageHubPage() {
           <CardHeader className="pb-3 border-b bg-muted/20">
             <CardTitle className="text-base flex items-center gap-2">
               <Send className="w-4 h-4 text-primary" />
-              {lang === "ar" ? "إرسال سريع (ممرضة / مريض)" : "Nurse / Patient Quick Send"}
+              {lang === "ar" ? "إرسال سريع (ممرضة / مريض)" : "Quick Send"}
             </CardTitle>
-            <Tabs value={roleTab} onValueChange={(v) => setRoleTab(v as "Nurse" | "Patient")} className="mt-2">
-              <TabsList className="grid grid-cols-2 w-full max-w-sm">
-                <TabsTrigger value="Nurse" className="gap-1.5">
-                  <Stethoscope className="w-3.5 h-3.5" />
-                  Nurse
-                </TabsTrigger>
-                <TabsTrigger value="Patient" className="gap-1.5">
-                  <User className="w-3.5 h-3.5" />
-                  Patient
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <div className="text-xs text-muted-foreground mt-2">{requestorRole}</div>
             <div className="text-xs text-muted-foreground mt-1">
               {lang === "ar" ? "المرسل" : "Sender"}: <span className="font-medium text-foreground">{sender}</span>
             </div>
