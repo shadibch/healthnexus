@@ -50,6 +50,7 @@ export interface SessionUser {
   roles: AppRole[];
   name: string;
   email: string;
+  phone: string | null;
   onboardingComplete: boolean;
   medicalCenterId: number | null;
   doctorDbId: number | null;
@@ -99,6 +100,7 @@ export async function resolveSessionUser(userId: number): Promise<SessionUser | 
     roles: dbRoles as AppRole[],
     name: user.name ?? "",
     email: user.email,
+    phone: user.phone ?? null,
     onboardingComplete: user.onboardingComplete,
     medicalCenterId: user.medicalCenterId ?? null,
     doctorDbId: null,

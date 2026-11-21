@@ -20,6 +20,26 @@ router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
   res.json(session);
 });
 
+const UpdateUserPhoneBody = z.object({
+  phone: z.string().trim().max(40).nullable().transform(value => value || null)
+    .refine(value => value === null || /^\+?[\d\s().-]{7,30}$/.test(value), "Enter a valid phone number"),
+});
+
+router.patch("/users/me", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
+  const parsed = UpdateUserPhoneBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  await getDb().update(usersTable)
+    .set({ phone: parsed.data.phone })
+    .where(eq(usersTable.id, session.userId));
+
+  res.json({ phone: parsed.data.phone });
+});
+
 const CompleteAdminOnboardingBody = z.object({
   centerName: z.string().min(2),
   address: z.string().optional(),
@@ -200,7 +220,7 @@ router.post("/users/onboarding/patient", requireAuth, async (req, res): Promise<
     currentMedications: data.currentMedications ?? null,
   }).returning();
 
-  await getDb().update(usersTable).set({ onboardingComplete: true }).where(eq(usersTable.id, session.userId));
+  await getDb().update(usersTable).set({ onboardingComplete: true, phone: data.phone?.trim() || null }).where(eq(usersTable.id, session.userId));
   res.json({ ok: true, patient });
 });
 

@@ -358,6 +358,7 @@ export default function SettingsPage() {
   const { toast } = useToast();
 
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState(user?.phone ?? "");
 
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoChanged, setLogoChanged] = useState(false);
@@ -389,6 +390,22 @@ export default function SettingsPage() {
 
   const { hasRole } = useRole();
   const isAdmin = hasRole("doctor") || hasRole("receptionist");
+
+  const phoneMutation = useMutation({
+    mutationFn: (value: string) => apiFetch<{ phone: string | null }>("/users/me", {
+      method: "PATCH",
+      body: JSON.stringify({ phone: value.trim() || null }),
+    }),
+    onSuccess: (data) => {
+      if (user) queryClient.setQueryData(["auth-me"], { ...user, phone: data.phone });
+      toast({ title: lang === "ar" ? "تم حفظ رقم الهاتف" : "Phone number saved" });
+    },
+    onError: (err: Error) => toast({
+      title: lang === "ar" ? "تعذر حفظ رقم الهاتف" : "Could not save phone number",
+      description: err.message,
+      variant: "destructive",
+    }),
+  });
 
   const displayName = name.trim() !== "" ? name : saved.clinicName;
   const displayLogo = logoChanged ? logoPreview : saved.logoBase64;
@@ -661,6 +678,32 @@ export default function SettingsPage() {
               : "Share your thoughts or questions and we'll get back to you soon"}
           </p>
         </div>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold">{lang === "ar" ? "بيانات الاتصال الخاصة بك" : "Your Contact Details"}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-1.5 max-w-md">
+              <Label htmlFor="user-phone">{lang === "ar" ? "رقم الهاتف" : "Phone Number"}</Label>
+              <Input
+                id="user-phone"
+                type="tel"
+                autoComplete="tel"
+                value={phone}
+                onChange={event => setPhone(event.target.value)}
+                placeholder="+971 50 123 4567"
+                dir="ltr"
+              />
+              <p className="text-xs text-muted-foreground">
+                {lang === "ar" ? "أضف رمز الدولة ليتمكن فريقك من التواصل معك." : "Include your country code so your team can contact you."}
+              </p>
+            </div>
+            <Button type="button" size="sm" onClick={() => phoneMutation.mutate(phone)} disabled={phoneMutation.isPending}>
+              {phoneMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+              {lang === "ar" ? "حفظ رقم الهاتف" : "Save Phone Number"}
+            </Button>
+          </CardContent>
+        </Card>
         {FeedbackCard}
       </div>
     );
@@ -688,6 +731,38 @@ export default function SettingsPage() {
           )}
         </p>
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold">{tr("Your Contact Details", "بيانات الاتصال الخاصة بك")}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1.5 max-w-md">
+            <Label htmlFor="user-phone">{tr("Phone Number", "رقم الهاتف")}</Label>
+            <Input
+              id="user-phone"
+              type="tel"
+              autoComplete="tel"
+              value={phone}
+              onChange={event => setPhone(event.target.value)}
+              placeholder="+971 50 123 4567"
+              dir="ltr"
+            />
+            <p className="text-xs text-muted-foreground">
+              {tr("Include your country code so your team can contact you.", "أضف رمز الدولة ليتمكن فريقك من التواصل معك.")}
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => phoneMutation.mutate(phone)}
+            disabled={phoneMutation.isPending}
+          >
+            {phoneMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+            {tr("Save Phone Number", "حفظ رقم الهاتف")}
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Live preview */}
       <Card className="border border-primary/20 bg-primary/5">

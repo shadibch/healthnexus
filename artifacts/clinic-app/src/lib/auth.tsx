@@ -12,6 +12,7 @@ export interface AuthUser {
   roles: AppRole[];
   name: string;
   email: string;
+  phone: string | null;
   onboardingComplete: boolean;
   medicalCenterId: number | null;
   doctorDbId: number | null;

@@ -8,6 +8,7 @@ export const usersTable = pgTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash"),
   name: text("name"),
+  phone: text("phone"),
   role: text("role").notNull().default("pending"),
   roles: text("roles").array().notNull().default(sql`'{}'::text[]`),
   onboardingComplete: boolean("onboarding_complete").notNull().default(false),
