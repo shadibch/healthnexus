@@ -90,15 +90,15 @@ router.post("/triage/dispatch", requireAuth, async (req, res): Promise<void> => 
       body: JSON.stringify({ sender, requestor_role, event_id, message }),
       signal: AbortSignal.timeout(10_000),
     });
+    const responseBody = await response.text().catch(() => "");
 
     if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      logger.warn({ status: response.status, text }, "Make.com webhook responded with error");
+      logger.warn({ status: response.status, responseBody }, "Make.com webhook responded with error");
       res.status(502).json({ error: "Make.com webhook unreachable", status: response.status });
       return;
     }
 
-    res.json({ success: true, event_id });
+    res.json({ success: true, event_id, response_body: responseBody });
   } catch (err) {
     logger.error({ err }, "Failed to dispatch triage message to Make.com");
     res.status(502).json({ error: "Failed to reach Make.com webhook" });

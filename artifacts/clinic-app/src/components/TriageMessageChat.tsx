@@ -12,12 +12,14 @@ import { AlertCircle, Bot, CheckCircle2, Loader2, Send, Stethoscope } from "luci
 interface DispatchResult {
   success: boolean;
   event_id: string;
+  response_body: string;
 }
 
 interface ChatMessage {
   id: string;
   text: string;
   eventId?: string;
+  responseBody?: string;
   status: "sending" | "sent" | "error";
   error?: string;
 }
@@ -39,7 +41,7 @@ export default function TriageMessageChat() {
       }).then(result => ({ ...result, id: payload.id })),
     onSuccess: result => {
       setMessages(previous => previous.map(message => message.id === result.id
-        ? { ...message, eventId: result.event_id, status: "sent" }
+        ? { ...message, eventId: result.event_id, responseBody: result.response_body, status: "sent" }
         : message));
     },
     onError: (error: Error, payload) => {
@@ -91,26 +93,40 @@ export default function TriageMessageChat() {
             </div>
           )}
           {messages.map(message => (
-            <div key={message.id} className={cn("flex", isRTL ? "justify-start" : "justify-end")}>
-              <div className="max-w-[92%] rounded-2xl rounded-br-md bg-primary text-primary-foreground px-4 py-2.5 shadow-sm space-y-1.5">
-                <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.text}</p>
-                {message.status === "sending" && (
-                  <span className="text-[11px] inline-flex items-center gap-1 opacity-90">
-                    <Loader2 className="w-3 h-3 animate-spin" /> {ar ? "جارٍ الإرسال…" : "Sending to Make…"}
-                  </span>
-                )}
-                {message.status === "sent" && (
-                  <div className="text-[11px] flex items-center gap-1 opacity-90">
-                    <CheckCircle2 className="w-3 h-3" /> {ar ? "تم الإرسال" : "Sent"}
-                    <span className="font-mono ml-1">{message.eventId}</span>
-                  </div>
-                )}
-                {message.status === "error" && (
-                  <span className="text-[11px] inline-flex items-center gap-1 text-red-100">
-                    <AlertCircle className="w-3 h-3" /> {message.error}
-                  </span>
-                )}
+            <div key={message.id} className="space-y-2">
+              <div className={cn("flex", isRTL ? "justify-start" : "justify-end")}>
+                <div className="max-w-[92%] rounded-2xl rounded-br-md bg-primary text-primary-foreground px-4 py-2.5 shadow-sm space-y-1.5">
+                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.text}</p>
+                  {message.status === "sending" && (
+                    <span className="text-[11px] inline-flex items-center gap-1 opacity-90">
+                      <Loader2 className="w-3 h-3 animate-spin" /> {ar ? "جارٍ الإرسال…" : "Sending to Make…"}
+                    </span>
+                  )}
+                  {message.status === "sent" && (
+                    <div className="text-[11px] flex items-center gap-1 opacity-90">
+                      <CheckCircle2 className="w-3 h-3" /> {ar ? "تم الإرسال" : "Sent"}
+                      <span className="font-mono ml-1">{message.eventId}</span>
+                    </div>
+                  )}
+                  {message.status === "error" && (
+                    <span className="text-[11px] inline-flex items-center gap-1 text-red-100">
+                      <AlertCircle className="w-3 h-3" /> {message.error}
+                    </span>
+                  )}
+                </div>
               </div>
+              {message.status === "sent" && (
+                <div className={cn("flex", isRTL ? "justify-end" : "justify-start")}>
+                  <div className="max-w-[92%] rounded-2xl rounded-tl-md border bg-muted/50 px-4 py-3 shadow-sm">
+                    <p className="text-[11px] font-semibold text-muted-foreground mb-1">
+                      {ar ? "استجابة Make (للقراءة فقط)" : "Make response · read only"}
+                    </p>
+                    <pre className="text-xs whitespace-pre-wrap break-words font-mono text-foreground">
+                      {message.responseBody?.length ? message.responseBody : (ar ? "لا يوجد محتوى في الاستجابة." : "The response body was empty.")}
+                    </pre>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
           <div ref={feedEndRef} />
