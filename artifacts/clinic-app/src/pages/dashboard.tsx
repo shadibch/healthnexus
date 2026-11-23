@@ -26,6 +26,7 @@ import {
 } from "recharts";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import TriageMessageChat from "@/components/TriageMessageChat";
 
 interface DashboardStats {
   totalPatients: number;
@@ -67,7 +68,7 @@ const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
 };
 
 export default function DashboardPage() {
-  const { role } = useRole();
+  const { role, hasRole } = useRole();
   const { t, isRTL } = useI18n();
 
   const { data: stats, isLoading: loadingStats } = useQuery<DashboardStats>({
@@ -133,6 +134,8 @@ export default function DashboardPage() {
           </Card>
         ))}
       </div>
+
+      {hasRole("doctor") && <TriageMessageChat />}
 
       <div className="grid md:grid-cols-2 gap-4">
         {role === "doctor" && (

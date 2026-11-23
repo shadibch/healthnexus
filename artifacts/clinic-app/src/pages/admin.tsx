@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import TriageMessageChat from "@/components/TriageMessageChat";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface StaffUser {
@@ -410,6 +411,8 @@ export default function AdminPage() {
         </h1>
         <p className="text-muted-foreground text-sm mt-1">Manage your medical center staff, AI access, and data backups</p>
       </div>
+
+      <TriageMessageChat />
 
       {/* ── Create Staff Account ── */}
       <Card>

@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import TriageMessageChat from "@/components/TriageMessageChat";
 
 interface Appointment {
   id: number;
@@ -754,6 +755,8 @@ export default function ReceptionPage() {
           </Button>
         </div>
       </div>
+
+      <TriageMessageChat />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

@@ -31,7 +31,6 @@ import {
   FileSearch,
   MessageSquare,
   Forward,
-  Send,
   ClipboardList,
 } from "lucide-react";
 import { useClinicSettings } from "@/lib/clinic-settings";
@@ -148,11 +147,6 @@ function buildNav(
   // ── Billing (receptionist / accountant, if not already added by doctor) ─────
   if ((has("receptionist") || has("accountant")) && !has("doctor")) {
     add({ href: "/billing", label: t("billing"), icon: ShieldCheck, badge: 0, badgeVariant: "red" });
-  }
-
-  // ── Message dispatch ───────────────────────────────────────────────────────
-  if (has("doctor", "nurse", "receptionist", "admin")) {
-    add({ href: "/triage-send", label: lang === "ar" ? "إرسال رسالة" : "Send Message", icon: Send, badge: 0, badgeVariant: "red" });
   }
 
   // ── Personal task list ─────────────────────────────────────────────────────
