@@ -35,7 +35,8 @@ import VerifyEmailPage, { VerifyPendingGate, OtpVerifyForm } from "@/pages/verif
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
 import FeedbackPage from "@/pages/feedback";
-import TriageHubPage from "@/pages/triage-hub";
+import TriageSendPage from "@/pages/triage-send";
+import MyTasksPage from "@/pages/my-tasks";
 import TriageForwardPage from "@/pages/triage-forward";
 import NotFound from "@/pages/not-found";
 import { Stethoscope, Loader2, LogIn, UserPlus, Eye, EyeOff, MailCheck } from "lucide-react";
@@ -434,7 +435,9 @@ function AppRoutes() {
           <Route path="/reminders" component={RemindersPage} />
           <Route path="/search-encounters" component={SearchEncountersPage} />
           <Route path="/admin" component={AdminPage} />
-          <Route path="/triage-hub" component={TriageHubPage} />
+          <Route path="/triage-send" component={TriageSendPage} />
+          <Route path="/my-tasks" component={MyTasksPage} />
+          <Route path="/triage-hub" component={TriageSendPage} />
           <Route path="/triage-forward" component={TriageForwardPage} />
           <Route path="/feedback" component={FeedbackPage} />
           <Route component={NotFound} />

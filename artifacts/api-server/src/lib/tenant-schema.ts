@@ -6,6 +6,7 @@ export type TenantClient = import("drizzle-orm/node-postgres").NodePgClient;/**
  * Tables that are CLONED into every clinic's tenant schema (schema-per-clinic).
  * These are the clinic-scoped working tables. Tables NOT listed here (users,
  * medical_centers, email_verification_tokens, password_reset_tokens,
+ * triage_dispatches,
  * medications, pharmacies, doctor_categories, haad_activity_catalogue) stay
  * global in the `public` schema and are shared across all clinics.
  *
@@ -30,6 +31,7 @@ export const TENANT_TABLES = [
   "conversations",
   "messages",
   "pharmacy_inventory",
+  "clinic_tasks",
 ] as const;
 
 /** Build a Postgres-safe schema identifier for a clinic tenant. */

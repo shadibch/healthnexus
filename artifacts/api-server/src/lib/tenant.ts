@@ -86,14 +86,17 @@ export async function tenantMiddleware(
   const tenantDb = makeDb(client);
 
   try {
+    const schemaCheck = await client.query("SELECT 1 FROM pg_namespace WHERE nspname = $1", [schemaName]);
+    if (schemaCheck.rowCount === 0) {
+      client.release();
+      res.status(503).json({ error: "Clinic data schema is unavailable" });
+      return;
+    }
     await client.query(`SET search_path TO ${schemaName}, public`);
   } catch (err) {
-    // The tenant schema doesn't exist yet (not on-boarded). Fall back to public
-    // so global operations still work; tenant tables appear after onboarding.
-    await client.query("SET search_path TO public").catch(() => undefined);
-    logger.warn({ err, centralId: centralIdNum }, "tenantMiddleware: failed to set search_path; using public");
+    logger.error({ err, centralId: centralIdNum }, "tenantMiddleware: failed to set clinic search_path");
     client.release();
-    next();
+    res.status(503).json({ error: "Clinic data is temporarily unavailable" });
     return;
   }
 

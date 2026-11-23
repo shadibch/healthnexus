@@ -21,3 +21,4 @@ export * from "./reminder-logs";
 export * from "./conversations";
 export * from "./messages";
 export * from "./clinic-tasks";
+export * from "./triage-dispatches";

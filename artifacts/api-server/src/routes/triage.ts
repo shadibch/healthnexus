@@ -1,10 +1,13 @@
 import crypto from "node:crypto";
 import { Router, type IRouter } from "express";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod/v4";
-import { clinicTasksTable } from "@workspace/db";
+import { clinicTasksTable, db, doctorsTable, pool, triageDispatchesTable } from "@workspace/db";
+import { drizzle } from "drizzle-orm/node-postgres";
+import * as schema from "@workspace/db/schema";
 import { getDb } from "../lib/tenant";
 import { getSessionUser, requireAuth } from "../lib/session";
+import { tenantSchemaName } from "../lib/tenant-schema";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -48,10 +51,10 @@ const patchTaskSchema = z.object({
   { message: "At least one field must be provided" },
 );
 
-function generateEventId(message: string): string {
+function generateEventId(sender: string, message: string): string {
   const date = new Date().toISOString().slice(0, 10).replaceAll("-", "_");
-  const messageHash = crypto.createHash("sha256").update(message).digest("hex").slice(0, 12);
-  return `evt_cams_${date}_${messageHash}`;
+  const senderAndBodyHash = crypto.createHash("sha256").update(`${sender}${message}`).digest("hex").slice(0, 12);
+  return `evt_cams_${date}_${senderAndBodyHash}`;
 }
 
 router.post("/triage/dispatch", requireAuth, async (req, res): Promise<void> => {
@@ -62,12 +65,25 @@ router.post("/triage/dispatch", requireAuth, async (req, res): Promise<void> => 
   }
 
   const user = getSessionUser(req)!;
+  if (!user.medicalCenterId) {
+    res.status(403).json({ error: "Your account is not assigned to a clinic" });
+    return;
+  }
   const { message } = parsed.data;
   const sender = user.email;
   const requestor_role = user.role.charAt(0).toUpperCase() + user.role.slice(1);
-  const event_id = generateEventId(message);
+  const event_id = generateEventId(sender, message);
 
   try {
+    await db.insert(triageDispatchesTable).values({
+      externalEventId: event_id,
+      medicalCenterId: user.medicalCenterId,
+      requestedByUserId: user.userId,
+    }).onConflictDoUpdate({
+      target: triageDispatchesTable.externalEventId,
+      set: { medicalCenterId: user.medicalCenterId, requestedByUserId: user.userId },
+    });
+
     const response = await fetch(MAKE_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -97,21 +113,37 @@ router.post("/triage/tasks", async (req, res): Promise<void> => {
   }
 
   const data = parsed.data;
-  const db = getDb();
-
+  let client: import("pg").PoolClient | undefined;
   try {
-    const existing = await db
+    const dispatch = await db.query.triageDispatchesTable.findFirst({
+      where: eq(triageDispatchesTable.externalEventId, data.external_event_id),
+    });
+    if (!dispatch) {
+      res.status(404).json({ error: "Unknown dispatch event" });
+      return;
+    }
+
+    client = await pool.connect();
+    const schemaName = tenantSchemaName(dispatch.medicalCenterId);
+    await client.query("BEGIN");
+    await client.query(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
+    await client.query(`CREATE TABLE IF NOT EXISTS ${schemaName}.clinic_tasks (LIKE public.clinic_tasks INCLUDING ALL)`);
+    await client.query(`SET LOCAL search_path TO ${schemaName}, public`);
+    const tenantDb = drizzle(client, { schema });
+
+    const existing = await tenantDb
       .select()
       .from(clinicTasksTable)
       .where(eq(clinicTasksTable.externalEventId, data.external_event_id))
       .limit(1);
 
     if (existing.length > 0) {
+      await client.query("COMMIT");
       res.status(200).json(existing[0]);
       return;
     }
 
-    const [created] = await db
+    const [created] = await tenantDb
       .insert(clinicTasksTable)
       .values({
         externalEventId: data.external_event_id,
@@ -126,14 +158,60 @@ router.post("/triage/tasks", async (req, res): Promise<void> => {
       })
       .returning();
 
+    await client.query("COMMIT");
     res.status(201).json(created);
   } catch (err) {
+    if (client) await client.query("ROLLBACK").catch(() => undefined);
     logger.error({ err }, "Failed to create triage task from callback");
     res.status(500).json({ error: "Failed to create triage task" });
+  } finally {
+    client?.release();
+  }
+});
+
+router.get("/triage/my-tasks", requireAuth, async (req, res): Promise<void> => {
+  const user = getSessionUser(req)!;
+  if (!user.medicalCenterId) {
+    res.status(403).json({ error: "Your account is not assigned to a clinic" });
+    return;
+  }
+
+  try {
+    const assignees = new Set([user.email, user.name].map(value => value.trim()).filter(Boolean));
+    if (user.roles.includes("doctor")) {
+      const doctor = await getDb().query.doctorsTable.findFirst({
+        where: eq(doctorsTable.userId, user.userId),
+      });
+      if (doctor) {
+        assignees.add(`${doctor.firstName} ${doctor.lastName}`.trim());
+        assignees.add(`Dr. ${doctor.firstName} ${doctor.lastName}`.trim());
+      }
+    }
+
+    const conditions = [...assignees].map(name =>
+      sql`lower(${clinicTasksTable.assignedPerson}) = lower(${name})`,
+    );
+    if (conditions.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    const tasks = await getDb().select().from(clinicTasksTable)
+      .where(or(...conditions))
+      .orderBy(desc(clinicTasksTable.createdAt));
+    res.json(tasks);
+  } catch (err) {
+    logger.error({ err, userId: user.userId }, "Failed to list user triage tasks");
+    res.status(500).json({ error: "Failed to fetch your tasks" });
   }
 });
 
 router.get("/triage/tasks", requireAuth, async (req, res): Promise<void> => {
+  const user = getSessionUser(req)!;
+  if (!user.medicalCenterId) {
+    res.status(403).json({ error: "Your account is not assigned to a clinic" });
+    return;
+  }
   try {
     const department = typeof req.query.department === "string" ? req.query.department : undefined;
     const assignedPerson = typeof req.query.assigned_person === "string" ? req.query.assigned_person : undefined;
@@ -163,6 +241,11 @@ router.get("/triage/tasks", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.patch("/triage/tasks/:id", requireAuth, async (req, res): Promise<void> => {
+  const user = getSessionUser(req)!;
+  if (!user.medicalCenterId) {
+    res.status(403).json({ error: "Your account is not assigned to a clinic" });
+    return;
+  }
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) {
     res.status(400).json({ error: "Invalid task id" });

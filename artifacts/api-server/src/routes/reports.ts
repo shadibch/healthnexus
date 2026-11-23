@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, inArray } from "drizzle-orm";
 import {
-  db,
   patientsTable,
   consultationsTable,
   medicalOrdersTable,
@@ -10,6 +9,7 @@ import {
   medicationsTable,
 } from "@workspace/db";
 import { requireAuth, requireRole, getSessionUser } from "../lib/session";
+import { getDb } from "../lib/tenant";
 
 const router: IRouter = Router();
 
@@ -24,17 +24,17 @@ router.get("/reports/overview", requireAuth, requireRole("doctor"), async (req, 
   const weekStart = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
 
   const [consultations, prescriptions] = await Promise.all([
-    db.select().from(consultationsTable)
+    getDb().select().from(consultationsTable)
       .where(eq(consultationsTable.doctorId, doctorId))
       .orderBy(desc(consultationsTable.createdAt)),
-    db.select().from(prescriptionsTable)
+    getDb().select().from(prescriptionsTable)
       .where(eq(prescriptionsTable.doctorId, doctorId))
       .orderBy(desc(prescriptionsTable.issuedAt)),
   ]);
 
   const consultationIds = consultations.map((c) => c.id);
   const orders = consultationIds.length > 0
-    ? await db.select().from(medicalOrdersTable)
+    ? await getDb().select().from(medicalOrdersTable)
         .where(inArray(medicalOrdersTable.consultationId, consultationIds))
         .orderBy(desc(medicalOrdersTable.orderedAt))
     : [];
@@ -98,13 +98,13 @@ router.get("/reports/orders", requireAuth, requireRole("doctor"), async (req, re
     type?: string; status?: string; from?: string; to?: string;
   };
 
-  const consultations = await db.select().from(consultationsTable)
+  const consultations = await getDb().select().from(consultationsTable)
     .where(eq(consultationsTable.doctorId, doctorId));
 
   const consultationIds = consultations.map((c) => c.id);
   if (consultationIds.length === 0) { res.json([]); return; }
 
-  let orders = await db.select().from(medicalOrdersTable)
+  let orders = await getDb().select().from(medicalOrdersTable)
     .where(inArray(medicalOrdersTable.consultationId, consultationIds))
     .orderBy(desc(medicalOrdersTable.orderedAt));
 
@@ -116,7 +116,7 @@ router.get("/reports/orders", requireAuth, requireRole("doctor"), async (req, re
   const consultMap = new Map(consultations.map((c) => [c.id, c]));
   const patientIds = [...new Set(consultations.map((c) => c.patientId))];
   const patients = patientIds.length > 0
-    ? await db.select().from(patientsTable).where(inArray(patientsTable.id, patientIds))
+    ? await getDb().select().from(patientsTable).where(inArray(patientsTable.id, patientIds))
     : [];
   const patientMap = new Map(patients.map((p) => [p.id, p]));
 
@@ -145,9 +145,9 @@ router.get("/reports/patient-summary", requireAuth, requireRole("doctor"), async
   const doctorId = session.doctorDbId!;
 
   const [patients, consultations, prescriptions] = await Promise.all([
-    db.select().from(patientsTable).orderBy(desc(patientsTable.createdAt)),
-    db.select().from(consultationsTable).where(eq(consultationsTable.doctorId, doctorId)),
-    db.select().from(prescriptionsTable).where(eq(prescriptionsTable.doctorId, doctorId)),
+    getDb().select().from(patientsTable).orderBy(desc(patientsTable.createdAt)),
+    getDb().select().from(consultationsTable).where(eq(consultationsTable.doctorId, doctorId)),
+    getDb().select().from(prescriptionsTable).where(eq(prescriptionsTable.doctorId, doctorId)),
   ]);
 
   const lastVisitMap = new Map<number, string>();

@@ -30,8 +30,9 @@ import {
   X,
   FileSearch,
   MessageSquare,
-  Bot,
   Forward,
+  Send,
+  ClipboardList,
 } from "lucide-react";
 import { useClinicSettings } from "@/lib/clinic-settings";
 import { Button } from "@/components/ui/button";
@@ -149,9 +150,14 @@ function buildNav(
     add({ href: "/billing", label: t("billing"), icon: ShieldCheck, badge: 0, badgeVariant: "red" });
   }
 
-  // ── AI Triage & Dispatch (clinical operations) ─────────────────────────────
+  // ── Message dispatch ───────────────────────────────────────────────────────
   if (has("doctor", "nurse", "receptionist", "admin")) {
-    add({ href: "/triage-hub", label: lang === "ar" ? "الفرز الذكي" : "AI Triage & Dispatch", icon: Bot, badge: 0, badgeVariant: "red" });
+    add({ href: "/triage-send", label: lang === "ar" ? "إرسال رسالة" : "Send Message", icon: Send, badge: 0, badgeVariant: "red" });
+  }
+
+  // ── Personal task list ─────────────────────────────────────────────────────
+  if (has("doctor", "nurse", "receptionist", "admin", "pharmacist", "pharmacy", "accountant", "operator")) {
+    add({ href: "/my-tasks", label: lang === "ar" ? "مهامي" : "My Tasks", icon: ClipboardList, badge: 0, badgeVariant: "red" });
   }
 
   // ── Pharmacy ───────────────────────────────────────────────────────────────
