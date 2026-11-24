@@ -376,6 +376,49 @@ router.post("/users/change-password", requireAuth, async (req, res): Promise<voi
   res.json({ ok: true });
 });
 
+const ResetStaffPasswordBody = z.object({
+  temporaryPassword: z.string().min(12).max(128),
+});
+
+router.patch("/users/:id/reset-password", requireAuth, async (req, res): Promise<void> => {
+  const session = getSessionUser(req)!;
+  if (!session.roles.includes("admin") || !session.medicalCenterId) {
+    res.status(403).json({ error: "Admin only" });
+    return;
+  }
+
+  const targetId = Number(req.params.id);
+  if (!Number.isSafeInteger(targetId) || targetId <= 0) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+  if (targetId === session.userId) {
+    res.status(400).json({ error: "Use your account password settings to change your own password" });
+    return;
+  }
+
+  const parsed = ResetStaffPasswordBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Temporary password must be at least 12 characters" });
+    return;
+  }
+
+  const target = await getDb().query.usersTable.findFirst({
+    where: eq(usersTable.id, targetId),
+  });
+  if (!target || target.medicalCenterId !== session.medicalCenterId) {
+    res.status(404).json({ error: "Staff account not found" });
+    return;
+  }
+
+  await getDb().update(usersTable)
+    .set({ passwordHash: await hashPassword(parsed.data.temporaryPassword), mustChangePassword: true })
+    .where(eq(usersTable.id, targetId));
+
+  logger.info({ adminUserId: session.userId, targetUserId: targetId }, "admin reset staff password");
+  res.json({ ok: true, mustChangePassword: true });
+});
+
 // ── GET /users/staff ──────────────────────────────────────────────────────────
 router.get("/users/staff", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;

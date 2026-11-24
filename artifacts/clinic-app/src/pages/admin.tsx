@@ -9,6 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
@@ -27,6 +35,7 @@ import {
   Database, Download, RotateCcw, Trash2, ShieldAlert, CalendarClock,
   HardDriveDownload, RefreshCw, Eye, EyeOff, Copy, Check, Plus, Mail, X,
   UserX, UserCheck,
+  KeyRound,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -354,6 +363,11 @@ export default function AdminPage() {
   const [createPassword, setCreatePassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [resetTarget, setResetTarget] = useState<StaffUser | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [resetCopied, setResetCopied] = useState(false);
+  const [resetComplete, setResetComplete] = useState(false);
 
   const { data, isLoading } = useQuery<{ staff: StaffUser[]; invites: StaffInvite[] }>({
     queryKey: ["staff"],
@@ -392,6 +406,23 @@ export default function AdminPage() {
       apiFetch(`/users/${userId}/deactivate`, { method: "PATCH", body: JSON.stringify({ deactivated }) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["staff"] }),
     onError: (e: Error) => toast({ title: "Failed to update account status", description: e.message, variant: "destructive" }),
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: ({ userId, temporaryPassword }: { userId: number; temporaryPassword: string; targetEmail: string }) =>
+      apiFetch(`/users/${userId}/reset-password`, {
+        method: "PATCH",
+        body: JSON.stringify({ temporaryPassword }),
+      }),
+    onSuccess: (_result, vars) => {
+      setResetComplete(true);
+      qc.invalidateQueries({ queryKey: ["staff"] });
+      toast({
+        title: "Temporary password set",
+        description: `${vars.targetEmail} must change it at next sign-in.`,
+      });
+    },
+    onError: (e: Error) => toast({ title: "Password reset failed", description: e.message, variant: "destructive" }),
   });
 
   const toggleAIMutation = useMutation({
@@ -630,22 +661,38 @@ export default function AdminPage() {
 
                           {/* Deactivate / Reactivate */}
                           {!isSelf && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className={cn(
-                                "shrink-0 gap-1.5 text-xs h-8",
-                                s.deactivated
-                                  ? "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                                  : "text-red-500 hover:text-red-600 hover:bg-red-50"
-                              )}
-                              onClick={() => deactivateMutation.mutate({ userId: s.id, deactivated: !s.deactivated })}
-                              disabled={deactivateMutation.isPending}
-                            >
-                              {s.deactivated
-                                ? <><UserCheck className="w-3.5 h-3.5" />Reactivate</>
-                                : <><UserX className="w-3.5 h-3.5" />Deactivate</>}
-                            </Button>
+                            <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5 text-xs h-8"
+                                onClick={() => {
+                                  setResetTarget(s);
+                                  setResetPassword("");
+                                  setShowResetPassword(false);
+                                  setResetCopied(false);
+                                  setResetComplete(false);
+                                }}
+                              >
+                                <KeyRound className="w-3.5 h-3.5" />Reset Password
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className={cn(
+                                  "gap-1.5 text-xs h-8",
+                                  s.deactivated
+                                    ? "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                    : "text-red-500 hover:text-red-600 hover:bg-red-50"
+                                )}
+                                onClick={() => deactivateMutation.mutate({ userId: s.id, deactivated: !s.deactivated })}
+                                disabled={deactivateMutation.isPending}
+                              >
+                                {s.deactivated
+                                  ? <><UserCheck className="w-3.5 h-3.5" />Reactivate</>
+                                  : <><UserX className="w-3.5 h-3.5" />Deactivate</>}
+                              </Button>
+                            </div>
                           )}
                         </div>
 
@@ -713,6 +760,99 @@ export default function AdminPage() {
           </Card>
         );
       })()}
+
+      <Dialog
+        open={!!resetTarget}
+        onOpenChange={open => {
+          if (!open && !resetPasswordMutation.isPending) {
+            setResetTarget(null);
+            setResetPassword("");
+            setResetComplete(false);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset staff password</DialogTitle>
+            <DialogDescription>
+              Set a temporary password for {resetTarget?.email}. They must change it at their next sign-in.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="reset-staff-password">Temporary password</Label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  id="reset-staff-password"
+                  type={showResetPassword ? "text" : "password"}
+                  value={resetPassword}
+                  onChange={event => setResetPassword(event.target.value)}
+                  minLength={12}
+                  maxLength={128}
+                  readOnly={resetComplete}
+                  placeholder="At least 12 characters"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowResetPassword(value => !value)}
+                  aria-label={showResetPassword ? "Hide temporary password" : "Show temporary password"}
+                >
+                  {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {resetComplete && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  title="Copy temporary password"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(resetPassword);
+                    setResetCopied(true);
+                    setTimeout(() => setResetCopied(false), 2000);
+                  }}
+                >
+                  {resetCopied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Share this temporary password directly with the staff member. It is not emailed by the app.
+            </p>
+          </div>
+          {resetComplete && (
+            <p className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800" role="status">
+              Password reset. The staff member will be required to choose a new password after signing in.
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setResetTarget(null)}
+              disabled={resetPasswordMutation.isPending}
+            >
+              {resetComplete ? "Close" : "Cancel"}
+            </Button>
+            {!resetComplete && (
+              <Button
+                type="button"
+                onClick={() => resetTarget && resetPasswordMutation.mutate({
+                  userId: resetTarget.id,
+                  targetEmail: resetTarget.email,
+                  temporaryPassword: resetPassword,
+                })}
+                disabled={!resetTarget || resetPassword.length < 12 || resetPasswordMutation.isPending}
+              >
+                {resetPasswordMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                Reset Password
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Pending Invitations ── */}
       {(data?.invites.length ?? 0) > 0 && (
