@@ -12,6 +12,7 @@ export const clinicSettingsTable = pgTable("clinic_settings", {
   latitude: numeric("latitude", { precision: 10, scale: 6 }),
   longitude: numeric("longitude", { precision: 10, scale: 6 }),
   currency: text("currency").notNull().default("AED"),
+  timeZone: text("time_zone"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow()

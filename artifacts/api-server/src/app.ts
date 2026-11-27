@@ -9,6 +9,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { attachSessionUser } from "./lib/session";
 import { tenantMiddleware } from "./lib/tenant";
+import { whatsappIntegrationAuth } from "./lib/whatsapp-auth";
 
 const app: Express = express();
 
@@ -52,6 +53,7 @@ app.use(
 );
 
 app.use("/api", attachSessionUser);
+app.use("/api/whatsapp", whatsappIntegrationAuth);
 app.use("/api", tenantMiddleware);
 app.use("/api", router);
 

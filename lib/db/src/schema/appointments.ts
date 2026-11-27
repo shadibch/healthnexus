@@ -9,6 +9,8 @@ export const appointmentsTable = pgTable("appointments", {
   scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
   status: text("status").notNull().default("scheduled"),
   type: text("type").notNull().default("routine"),
+  durationMinutes: integer("duration_minutes").notNull().default(30),
+  source: text("source").notNull().default("clinic"),
   notes: text("notes"),
   queueNumber: integer("queue_number"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

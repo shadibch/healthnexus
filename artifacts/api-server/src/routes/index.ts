@@ -23,6 +23,7 @@ import backupsRouter from "./backups";
 import remindersRouter from "./reminders";
 import feedbackRouter from "./feedback";
 import triageRouter from "./triage";
+import whatsappRouter from "./whatsapp";
 
 const router: IRouter = Router();
 
@@ -50,5 +51,6 @@ router.use(backupsRouter);
 router.use(remindersRouter);
 router.use(feedbackRouter);
 router.use(triageRouter);
+router.use("/whatsapp", whatsappRouter);
 
 export default router;

@@ -43,6 +43,20 @@
       "when": 1795305600000,
       "tag": "0005_triage_tenant_routing",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795737600000,
+      "tag": "0006_whatsapp_integrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795824000000,
+      "tag": "0007_clinic_scheduling",
+      "breakpoints": true
     }
   ]
 }

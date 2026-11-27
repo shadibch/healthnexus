@@ -21,6 +21,7 @@ function rowToJson(s: SettingsRow) {
     latitude:  s.latitude  != null ? parseFloat(s.latitude)  : null,
     longitude: s.longitude != null ? parseFloat(s.longitude) : null,
     currency: s.currency ?? "AED",
+    timeZone: s.timeZone ?? null,
   };
 }
 
@@ -33,6 +34,7 @@ const EMPTY_DEFAULTS = {
   latitude: null,
   longitude: null,
   currency: "AED",
+  timeZone: null as string | null,
 };
 
 // ── GET /settings — public, no auth required (login page needs it too) ────────

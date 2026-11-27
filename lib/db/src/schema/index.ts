@@ -22,3 +22,8 @@ export * from "./conversations";
 export * from "./messages";
 export * from "./clinic-tasks";
 export * from "./triage-dispatches";
+export * from "./whatsapp";
+export * from "./doctor-schedules";
+export * from "./doctor-unavailable-periods";
+export * from "./whatsapp-booking-requests";
+export * from "./appointment-history";

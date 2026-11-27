@@ -1,6 +1,6 @@
 ﻿import { Router, type IRouter } from "express";
-import { eq, and, gte, lt } from "drizzle-orm";
-import { appointmentsTable, patientsTable, doctorsTable } from "@workspace/db";
+import { eq, and, gte, lt, isNull, notInArray, or, sql } from "drizzle-orm";
+import { appointmentsTable, patientsTable, doctorsTable, doctorSchedulesTable, doctorUnavailablePeriodsTable, appointmentHistoryTable } from "@workspace/db";
 import {
   ListAppointmentsQueryParams,
   CreateAppointmentBody,
@@ -12,6 +12,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth, getSessionUser } from "../lib/session";
 import { getDb } from "../lib/tenant";
+import { addLocalDays, configuredTimeZone, localTimeToUtc, minutesOfDay, partsInTimeZone, SchedulingError, validateAndLockSlot } from "../lib/scheduling";
 
 const router: IRouter = Router();
 
@@ -45,60 +46,60 @@ router.get("/appointments/slots", requireAuth, async (req, res): Promise<void> =
     res.status(400).json({ error: "doctorId and date are required" }); return;
   }
 
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  const date = new Date(`${dateStr}T00:00:00Z`);
+  if (!dateMatch || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== dateStr) {
     res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD" }); return;
   }
 
   const [doctor] = await getDb().select().from(doctorsTable).where(eq(doctorsTable.id, doctorId)).limit(1);
   if (!doctor) { res.status(404).json({ error: "Doctor not found" }); return; }
+  if (!doctor.isAvailable) { res.status(200).json({ doctorId, date: dateStr, slots: [] }); return; }
 
-  // Fetch all non-cancelled appointments for this doctor on this date
-  const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0);
-  const dayEnd   = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1, 0, 0, 0);
-
-  const booked = await getDb().select({ scheduledAt: appointmentsTable.scheduledAt, status: appointmentsTable.status })
-    .from(appointmentsTable)
-    .where(
-      and(
-        eq(appointmentsTable.doctorId, doctorId),
-        gte(appointmentsTable.scheduledAt, dayStart),
-        lt(appointmentsTable.scheduledAt, dayEnd)
-      )
-    );
-
-  const bookedMinutes = new Set(
-    booked
-      .filter((a) => a.status !== "cancelled" && a.status !== "no_show")
-      .map((a) => {
-        const d = new Date(a.scheduledAt);
-        return d.getHours() * 60 + d.getMinutes();
-      })
+  let timeZone: string;
+  try {
+    timeZone = await configuredTimeZone(getDb());
+  } catch (error) {
+    res.status(503).json({ error: error instanceof Error ? error.message : "Clinic timezone not configured" });
+    return;
+  }
+  const dayOfWeek = new Date(`${dateStr}T12:00:00Z`).getUTCDay();
+  const dayStart = localTimeToUtc(dateStr, "00:00", timeZone);
+  const dayEnd = localTimeToUtc(addLocalDays(dateStr, 1), "00:00", timeZone);
+  if (!dayStart || !dayEnd) { res.status(400).json({ error: "Date invalid in clinic timezone" }); return; }
+  const rules = await getDb().select().from(doctorSchedulesTable).where(and(
+    eq(doctorSchedulesTable.doctorId, doctorId), eq(doctorSchedulesTable.dayOfWeek, dayOfWeek),
+  ));
+  const relevantRules = rules.filter((rule) =>
+    (!rule.effectiveFrom || rule.effectiveFrom <= dateStr)
+    && (!rule.effectiveUntil || rule.effectiveUntil >= dateStr),
   );
-
+  const booked = await getDb().select({ scheduledAt: appointmentsTable.scheduledAt, duration: appointmentsTable.durationMinutes, status: appointmentsTable.status })
+    .from(appointmentsTable).where(and(
+      eq(appointmentsTable.doctorId, doctorId),
+      notInArray(appointmentsTable.status, ["cancelled", "no_show"]),
+      sql`${appointmentsTable.scheduledAt} < ${dayEnd} AND (${appointmentsTable.scheduledAt} + (${appointmentsTable.durationMinutes} * interval '1 minute')) > ${dayStart}`,
+    ));
+  const blocks = await getDb().select().from(doctorUnavailablePeriodsTable).where(and(
+    or(isNull(doctorUnavailablePeriodsTable.doctorId), eq(doctorUnavailablePeriodsTable.doctorId, doctorId)),
+    sql`${doctorUnavailablePeriodsTable.startsAt} < ${dayEnd} AND ${doctorUnavailablePeriodsTable.endsAt} > ${dayStart}`,
+  ));
   const now = new Date();
-  const isToday = dayStart.toDateString() === now.toDateString();
-
-  // Generate 30-min slots: 08:30–12:30, 14:00–17:00 (lunch break 12:30-14:00)
-  const SLOT_PAIRS: [number, number][] = [
-    [8, 30], [9, 0], [9, 30], [10, 0], [10, 30], [11, 0], [11, 30], [12, 0], [12, 30],
-    [14, 0], [14, 30], [15, 0], [15, 30], [16, 0], [16, 30],
-  ];
-
-  const slots = SLOT_PAIRS.map(([h, m]) => {
-    const slotMinutes = h * 60 + m;
-    const slotTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), h, m, 0);
-    const isPast = isToday && slotTime <= now;
-    const isBooked = bookedMinutes.has(slotMinutes);
-    return {
-      time: `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`,
-      available: !isPast && !isBooked,
-      booked: isBooked,
-      past: isPast,
-    };
-  });
-
-  res.json({ doctorId, date: dateStr, slots });
+  const slotMap = new Map<string, { time: string; available: boolean; booked: boolean; past: boolean }>();
+  for (const rule of relevantRules) {
+    for (let minute = minutesOfDay(rule.startTime); minute + rule.slotDurationMinutes <= minutesOfDay(rule.endTime); minute += rule.slotDurationMinutes) {
+      const time = `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+      const start = localTimeToUtc(dateStr, time, timeZone);
+      if (!start) continue;
+      const end = new Date(start.getTime() + rule.slotDurationMinutes * 60_000);
+      const isBooked = booked.some((appointment) => appointment.scheduledAt < end
+        && appointment.scheduledAt.getTime() + appointment.duration * 60_000 > start.getTime());
+      const isBlocked = blocks.some((block) => block.startsAt < end && block.endsAt > start);
+      const past = start <= now;
+      slotMap.set(time, { time, available: !past && !isBooked && !isBlocked, booked: isBooked || isBlocked, past });
+    }
+  }
+  res.json({ doctorId, date: dateStr, timezone: timeZone, slots: [...slotMap.values()] });
 });
 
 router.get("/appointments/today", requireAuth, async (req, res): Promise<void> => {
@@ -186,47 +187,47 @@ router.post("/appointments/book", requireAuth, async (req, res): Promise<void> =
     res.status(400).json({ error: "Cannot book a slot in the past" }); return;
   }
 
-  // Check slot is not already taken
-  const slotStart = slotDate;
-  const slotEnd = new Date(slotDate.getTime() + 30 * 60 * 1000);
-  const conflict = await getDb().select({ id: appointmentsTable.id })
-    .from(appointmentsTable)
-    .where(
-      and(
-        eq(appointmentsTable.doctorId, parseInt(doctorId)),
-        gte(appointmentsTable.scheduledAt, slotStart),
-        lt(appointmentsTable.scheduledAt, slotEnd)
-      )
-    )
-    .limit(1);
-
-  const taken = conflict.filter(() => true); // drizzle returns array
-  if (taken.length > 0) {
-    res.status(409).json({ error: "This slot has just been booked. Please choose another." }); return;
+  let appointment;
+  try {
+    appointment = await getDb().transaction(async (tx) => {
+      const slot = await validateAndLockSlot(tx, { doctorId: Number(doctorId), start: slotDate });
+      const parts = partsInTimeZone(slotDate, slot.timeZone);
+      const today = partsInTimeZone(new Date(), slot.timeZone);
+      let queueNumber: number | null = null;
+      if (parts.year === today.year && parts.month === today.month && parts.day === today.day) {
+        const dateText = `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+        const start = localTimeToUtc(dateText, "00:00", slot.timeZone)!;
+        const end = localTimeToUtc(addLocalDays(dateText, 1), "00:00", slot.timeZone)!;
+        const [count] = await tx.select({ value: sql<number>`count(*)::int` }).from(appointmentsTable).where(and(
+          gte(appointmentsTable.scheduledAt, start), lt(appointmentsTable.scheduledAt, end),
+          notInArray(appointmentsTable.status, ["cancelled", "no_show"]),
+        ));
+        queueNumber = (count?.value ?? 0) + 1;
+      }
+      const [created] = await tx.insert(appointmentsTable).values({
+        patientId: session.patientDbId!,
+        doctorId: Number(doctorId),
+        scheduledAt: slotDate,
+        durationMinutes: slot.durationMinutes,
+        source: "patient",
+        type,
+        status: "scheduled",
+        notes: notes ?? null,
+        queueNumber,
+      }).returning();
+      await tx.insert(appointmentHistoryTable).values({
+        appointmentId: created.id, action: "booked", source: "patient",
+        nextDoctorId: created.doctorId, nextScheduledAt: created.scheduledAt, actorId: session.userId,
+      });
+      return created;
+    });
+  } catch (error) {
+    if (error instanceof SchedulingError) {
+      res.status(error.code === "SCHEDULING_NOT_CONFIGURED" ? 503 : 409).json({ error: error.message, code: error.code });
+      return;
+    }
+    throw error;
   }
-
-  // Queue number if today
-  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
-  let queueNumber: number | null = null;
-  if (slotDate >= todayStart && slotDate < todayEnd) {
-    const todayAppts = await getDb().select()
-      .from(appointmentsTable)
-      .where(and(gte(appointmentsTable.scheduledAt, todayStart), lt(appointmentsTable.scheduledAt, todayEnd)));
-    queueNumber = todayAppts.length + 1;
-  }
-
-  const [appointment] = await getDb().insert(appointmentsTable)
-    .values({
-      patientId: session.patientDbId,
-      doctorId: parseInt(doctorId),
-      scheduledAt: slotDate,
-      type,
-      status: "scheduled",
-      notes: notes ?? null,
-      queueNumber,
-    })
-    .returning();
 
   const { patientMap, doctorMap } = await getMaps();
   res.status(201).json(enrichAppointment(appointment, patientMap, doctorMap));
@@ -253,10 +254,22 @@ router.patch("/appointments/:id/cancel", requireAuth, async (req, res): Promise<
     res.status(400).json({ error: `Cannot cancel an appointment with status: ${appointment.status}` }); return;
   }
 
-  const [updated] = await getDb().update(appointmentsTable)
-    .set({ status: "cancelled" })
-    .where(eq(appointmentsTable.id, apptId))
-    .returning();
+  const updated = await getDb().transaction(async (tx) => {
+    const [row] = await tx.select().from(appointmentsTable).where(eq(appointmentsTable.id, apptId)).for("update").limit(1);
+    if (!row || row.patientId !== session.patientDbId || ["completed", "cancelled", "no_show", "in_progress"].includes(row.status)) return null;
+    const [cancelled] = await tx.update(appointmentsTable).set({ status: "cancelled" })
+      .where(eq(appointmentsTable.id, apptId)).returning();
+    if (cancelled) await tx.insert(appointmentHistoryTable).values({
+      appointmentId: cancelled.id,
+      action: "cancelled",
+      source: "patient",
+      previousDoctorId: cancelled.doctorId,
+      previousScheduledAt: cancelled.scheduledAt,
+      actorId: session.userId,
+    });
+    return cancelled;
+  });
+  if (!updated) { res.status(409).json({ error: "Appointment status changed; refresh and try again" }); return; }
 
   const { patientMap, doctorMap } = await getMaps();
   res.json(enrichAppointment(updated, patientMap, doctorMap));
@@ -293,27 +306,45 @@ router.patch("/appointments/:id/reschedule", requireAuth, async (req, res): Prom
 
   const targetDoctorId = doctorId ? parseInt(doctorId) : appointment.doctorId;
 
-  // Conflict check
-  const slotEnd = new Date(newDate.getTime() + 30 * 60 * 1000);
-  const conflicts = await getDb().select({ id: appointmentsTable.id })
-    .from(appointmentsTable)
-    .where(
-      and(
-        eq(appointmentsTable.doctorId, targetDoctorId),
-        gte(appointmentsTable.scheduledAt, newDate),
-        lt(appointmentsTable.scheduledAt, slotEnd)
-      )
-    );
-
-  const hasConflict = conflicts.some((c) => c.id !== apptId);
-  if (hasConflict) {
-    res.status(409).json({ error: "This slot has just been booked. Please choose another." }); return;
+  let updated;
+  try {
+    updated = await getDb().transaction(async (tx) => {
+      const [current] = await tx.select().from(appointmentsTable).where(eq(appointmentsTable.id, apptId)).for("update").limit(1);
+      if (!current || current.patientId !== session.patientDbId) throw new Error("APPOINTMENT_NOT_FOUND");
+      if (["completed", "cancelled", "no_show", "in_progress"].includes(current.status)) throw new Error("RESCHEDULE_NOT_ALLOWED");
+      const slot = await validateAndLockSlot(tx, { doctorId: targetDoctorId, start: newDate, excludeAppointmentId: apptId });
+      const [rescheduled] = await tx.update(appointmentsTable).set({
+        scheduledAt: newDate,
+        doctorId: targetDoctorId,
+        durationMinutes: slot.durationMinutes,
+        status: "scheduled",
+        source: "patient",
+      }).where(eq(appointmentsTable.id, apptId)).returning();
+      await tx.insert(appointmentHistoryTable).values({
+        appointmentId: apptId,
+        action: "rescheduled",
+        source: "patient",
+        previousDoctorId: current.doctorId,
+        nextDoctorId: targetDoctorId,
+        previousScheduledAt: current.scheduledAt,
+        nextScheduledAt: newDate,
+        actorId: session.userId,
+      });
+      return rescheduled;
+    });
+  } catch (error) {
+    if (error instanceof SchedulingError) {
+      res.status(error.code === "SCHEDULING_NOT_CONFIGURED" ? 503 : 409).json({ error: error.message, code: error.code });
+      return;
+    }
+    if (error instanceof Error && error.message === "RESCHEDULE_NOT_ALLOWED") {
+      res.status(409).json({ error: "This appointment can no longer be rescheduled" }); return;
+    }
+    if (error instanceof Error && error.message === "APPOINTMENT_NOT_FOUND") {
+      res.status(404).json({ error: "Appointment not found" }); return;
+    }
+    throw error;
   }
-
-  const [updated] = await getDb().update(appointmentsTable)
-    .set({ scheduledAt: newDate, doctorId: targetDoctorId, status: "scheduled" })
-    .where(eq(appointmentsTable.id, apptId))
-    .returning();
 
   const { patientMap, doctorMap } = await getMaps();
   res.json(enrichAppointment(updated, patientMap, doctorMap));
@@ -328,21 +359,44 @@ router.post("/appointments", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreateAppointmentBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
   const scheduledAt = new Date(parsed.data.scheduledAt);
-
-  let queueNumber: number | null = null;
-  if (scheduledAt >= todayStart && scheduledAt < todayEnd) {
-    const todayAppts = await getDb().select()
-      .from(appointmentsTable)
-      .where(and(gte(appointmentsTable.scheduledAt, todayStart), lt(appointmentsTable.scheduledAt, todayEnd)));
-    queueNumber = todayAppts.length + 1;
+  let appointment;
+  try {
+    appointment = await getDb().transaction(async (tx) => {
+      const slot = await validateAndLockSlot(tx, { doctorId: parsed.data.doctorId, start: scheduledAt });
+      const local = partsInTimeZone(scheduledAt, slot.timeZone);
+      const today = partsInTimeZone(new Date(), slot.timeZone);
+      let queueNumber: number | null = null;
+      if (local.year === today.year && local.month === today.month && local.day === today.day) {
+        const dateText = `${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`;
+        const start = localTimeToUtc(dateText, "00:00", slot.timeZone)!;
+        const end = localTimeToUtc(addLocalDays(dateText, 1), "00:00", slot.timeZone)!;
+        const [count] = await tx.select({ value: sql<number>`count(*)::int` }).from(appointmentsTable).where(and(
+          gte(appointmentsTable.scheduledAt, start), lt(appointmentsTable.scheduledAt, end),
+          notInArray(appointmentsTable.status, ["cancelled", "no_show"]),
+        ));
+        queueNumber = (count?.value ?? 0) + 1;
+      }
+      const [created] = await tx.insert(appointmentsTable).values({
+        ...parsed.data,
+        scheduledAt,
+        durationMinutes: slot.durationMinutes,
+        source: "clinic",
+        queueNumber,
+      }).returning();
+      await tx.insert(appointmentHistoryTable).values({
+        appointmentId: created.id, action: "booked", source: "clinic",
+        nextDoctorId: created.doctorId, nextScheduledAt: created.scheduledAt, actorId: session.userId,
+      });
+      return created;
+    });
+  } catch (error) {
+    if (error instanceof SchedulingError) {
+      res.status(error.code === "SCHEDULING_NOT_CONFIGURED" ? 503 : 409).json({ error: error.message, code: error.code });
+      return;
+    }
+    throw error;
   }
-
-  const [appointment] = await getDb().insert(appointmentsTable)
-    .values({ ...parsed.data, scheduledAt, queueNumber })
-    .returning();
 
   const { patientMap, doctorMap } = await getMaps();
   res.status(201).json(enrichAppointment(appointment, patientMap, doctorMap));
@@ -387,10 +441,46 @@ router.patch("/appointments/:id", requireAuth, async (req, res): Promise<void> =
   if (parsed.data.queueNumber != null) updateData.queueNumber = parsed.data.queueNumber;
   if (parsed.data.scheduledAt != null) updateData.scheduledAt = new Date(parsed.data.scheduledAt);
 
-  const [appointment] = await getDb().update(appointmentsTable)
-    .set(updateData)
-    .where(eq(appointmentsTable.id, params.data.id))
-    .returning();
+  let appointment;
+  if (updateData.scheduledAt != null) {
+    try {
+      appointment = await getDb().transaction(async (tx) => {
+        const [current] = await tx.select().from(appointmentsTable).where(eq(appointmentsTable.id, params.data.id)).for("update").limit(1);
+        if (!current) return null;
+        const slot = await validateAndLockSlot(tx, {
+          doctorId: current.doctorId,
+          start: updateData.scheduledAt as Date,
+          excludeAppointmentId: current.id,
+        });
+        const [updated] = await tx.update(appointmentsTable).set({
+          ...updateData,
+          durationMinutes: slot.durationMinutes,
+        }).where(eq(appointmentsTable.id, current.id)).returning();
+        await tx.insert(appointmentHistoryTable).values({
+          appointmentId: current.id,
+          action: "rescheduled",
+          source: "clinic",
+          previousDoctorId: current.doctorId,
+          nextDoctorId: current.doctorId,
+          previousScheduledAt: current.scheduledAt,
+          nextScheduledAt: updated.scheduledAt,
+          actorId: session.userId,
+        });
+        return updated;
+      });
+    } catch (error) {
+      if (error instanceof SchedulingError) {
+        res.status(error.code === "SCHEDULING_NOT_CONFIGURED" ? 503 : 409).json({ error: error.message, code: error.code });
+        return;
+      }
+      throw error;
+    }
+  } else {
+    [appointment] = await getDb().update(appointmentsTable)
+      .set(updateData)
+      .where(eq(appointmentsTable.id, params.data.id))
+      .returning();
+  }
   if (!appointment) { res.status(404).json({ error: "Appointment not found" }); return; }
 
   const { patientMap, doctorMap } = await getMaps();

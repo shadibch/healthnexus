@@ -113,7 +113,7 @@ router.post("/triage/tasks", async (req, res): Promise<void> => {
   }
 
   const data = parsed.data;
-  let client: import("pg").PoolClient | undefined;
+  let client: any;
   try {
     const dispatch = await db.query.triageDispatchesTable.findFirst({
       where: eq(triageDispatchesTable.externalEventId, data.external_event_id),

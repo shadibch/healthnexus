@@ -32,6 +32,11 @@ export const TENANT_TABLES = [
   "messages",
   "pharmacy_inventory",
   "clinic_tasks",
+  "whatsapp_webhook_events",
+  "doctor_schedules",
+  "doctor_unavailable_periods",
+  "whatsapp_booking_requests",
+  "appointment_history",
 ] as const;
 
 /** Build a Postgres-safe schema identifier for a clinic tenant. */
