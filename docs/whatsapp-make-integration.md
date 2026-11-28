@@ -170,7 +170,7 @@ GET /api/whatsapp/availability?medical_center_id=1&specialization=cardiology&dat
 
 Doctor results include only `is_available` doctors. GP searches also match general-practice category names; a specialist request is never silently changed to a GP. Availability returns clinic-local date/time context and absolute timestamps:
 
-Availability checks the requested date first, then searches forward up to 3,650 calendar days (ten years) by default and returns the nearest date with open slots. Use the optional `search_days` query parameter (0–3,650) to choose a shorter window; `0` checks only the requested date. The response includes `requested_date`, `nearest_date`, and `searched_through`. An empty result means no matching available doctor has a configured schedule with an open slot in the searched period; the API cannot infer working hours or create slots when schedule data is missing.
+Availability checks the requested date and the next two calendar dates (three dates total) by default, then returns slots for the first date with openings. Use the optional `search_days` query parameter (0–2) to choose a shorter window; `0` checks only the requested date. The response includes `requested_date`, `nearest_date`, and `searched_through`. An empty result means no matching available doctor has a configured schedule with an open slot in those dates; the API cannot infer working hours or create slots when schedule data is missing.
 
 ```json
 {
@@ -180,7 +180,7 @@ Availability checks the requested date first, then searches forward up to 3,650 
     "date": "2026-12-10",
     "nearest_date": "2026-12-10",
     "searched_through": "2026-12-10",
-    "search_days": 3650,
+    "search_days": 2,
     "timezone": "Asia/Qatar",
     "available_slots": [
       {

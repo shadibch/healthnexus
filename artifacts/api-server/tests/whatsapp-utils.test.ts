@@ -64,16 +64,15 @@ test("detects overlapping appointments but allows adjacent slots", () => {
 });
 
 
-test("availability search uses app weekdays and finds the nearest opening beyond one year", () => {
+test("availability search finds the nearest open day within the three-day window", () => {
   assert.equal(weekdayOfDate("2026-11-29"), 0); // Sunday
   assert.equal(weekdayOfDate("2026-11-30"), 1); // Monday
-  const requested = "2026-11-27"; // Friday
-  const dates = Array.from({ length: 1_461 }, (_, offset) => addLocalDays(requested, offset));
-  const nextMonday = findNearestWithAvailability(dates, (date) => weekdayOfDate(date) === 1 ? [date] : []);
-  assert.equal(nextMonday.date, "2026-11-30");
-  const afterYear = addLocalDays(requested, 400);
-  const delayed = findNearestWithAvailability(dates, (date) => date >= afterYear && weekdayOfDate(date) === 1 ? [date] : []);
-  assert.ok(delayed.date && delayed.date >= afterYear);
-  assert.equal(weekdayOfDate(delayed.date!), 1);
-  assert.ok((Date.parse(`${delayed.date}T00:00:00Z`) - Date.parse(`${requested}T00:00:00Z`)) / 86_400_000 > 365);
+  const requested = "2026-11-28"; // Saturday
+  const threeDates = Array.from({ length: 3 }, (_, offset) => addLocalDays(requested, offset));
+  const nearest = findNearestWithAvailability(threeDates, (date) => weekdayOfDate(date) === 1 ? [date] : []);
+  assert.equal(nearest.date, "2026-11-30");
+  assert.equal(nearest.searchedThrough, "2026-11-30");
+  const noOpening = findNearestWithAvailability(threeDates, () => []);
+  assert.equal(noOpening.date, null);
+  assert.equal(noOpening.searchedThrough, "2026-11-30");
 });

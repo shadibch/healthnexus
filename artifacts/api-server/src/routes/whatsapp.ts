@@ -617,12 +617,11 @@ const availabilityQuery = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   preferred_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
   duration: z.coerce.number().int().positive().max(240).optional(),
-  search_days: z.coerce.number().int().min(0).max(3650).optional(),
+  search_days: z.coerce.number().int().min(0).max(2).optional(),
 });
 
-// Search up to ten years by default so callers can offer the nearest real opening
-// even when a clinic has long scheduling lead times. Callers may lower the window.
-const DEFAULT_AVAILABILITY_SEARCH_DAYS = 3650;
+// Limit the database window to three calendar dates for fast availability lookups.
+const DEFAULT_AVAILABILITY_SEARCH_DAYS = 2;
 
 router.get("/availability", async (req, res): Promise<void> => {
   const auth = integration(res);
