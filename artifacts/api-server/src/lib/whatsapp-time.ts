@@ -99,6 +99,21 @@ export function matchesScheduleSlot(
     && local.second === 0;
 }
 
+
+export function weekdayOfDate(date: string): number {
+  return new Date(`${date}T12:00:00Z`).getUTCDay();
+}
+
+export function findNearestWithAvailability<T>(dates: readonly string[], slotsForDate: (date: string) => T[]) {
+  let searchedThrough: string | null = null;
+  for (const date of dates) {
+    searchedThrough = date;
+    const available = slotsForDate(date);
+    if (available.length) return { date, searchedThrough, available };
+  }
+  return { date: null, searchedThrough, available: [] as T[] };
+}
+
 export function intervalsOverlap(startA: Date, endA: Date, startB: Date, endB: Date): boolean {
   return startA < endB && endA > startB;
 }

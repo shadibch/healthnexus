@@ -4,6 +4,8 @@ import { normalizeWhatsappPhone } from "../src/lib/whatsapp-phone.ts";
 import {
   addLocalDays,
   intervalsOverlap,
+  findNearestWithAvailability,
+  weekdayOfDate,
   localTimeToUtc,
   matchesScheduleSlot,
   minutesOfDay,
@@ -59,4 +61,19 @@ test("matches schedule slots by weekday, effective dates, and duration", () => {
 test("detects overlapping appointments but allows adjacent slots", () => {
   assert.equal(intervalsOverlap(new Date("2026-12-01T06:00Z"), new Date("2026-12-01T06:30Z"), new Date("2026-12-01T06:30Z"), new Date("2026-12-01T07:00Z")), false);
   assert.equal(intervalsOverlap(new Date("2026-12-01T06:00Z"), new Date("2026-12-01T06:30Z"), new Date("2026-12-01T06:29Z"), new Date("2026-12-01T07:00Z")), true);
+});
+
+
+test("availability search uses app weekdays and finds the nearest opening beyond one year", () => {
+  assert.equal(weekdayOfDate("2026-11-29"), 0); // Sunday
+  assert.equal(weekdayOfDate("2026-11-30"), 1); // Monday
+  const requested = "2026-11-27"; // Friday
+  const dates = Array.from({ length: 1_461 }, (_, offset) => addLocalDays(requested, offset));
+  const nextMonday = findNearestWithAvailability(dates, (date) => weekdayOfDate(date) === 1 ? [date] : []);
+  assert.equal(nextMonday.date, "2026-11-30");
+  const afterYear = addLocalDays(requested, 400);
+  const delayed = findNearestWithAvailability(dates, (date) => date >= afterYear && weekdayOfDate(date) === 1 ? [date] : []);
+  assert.ok(delayed.date && delayed.date >= afterYear);
+  assert.equal(weekdayOfDate(delayed.date!), 1);
+  assert.ok((Date.parse(`${delayed.date}T00:00:00Z`) - Date.parse(`${requested}T00:00:00Z`)) / 86_400_000 > 365);
 });

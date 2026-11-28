@@ -26,6 +26,7 @@ import {
 } from "../lib/whatsapp-auth";
 import { logger } from "../lib/logger";
 import { addLocalDays, configuredTimeZone, localTimeToUtc, minutesOfDay, partsInTimeZone, localDateText, SchedulingError, validTimeZone, validateAndLockSlot } from "../lib/scheduling";
+import { findNearestWithAvailability, weekdayOfDate } from "../lib/whatsapp-time";
 import { normalizeWhatsappPhone } from "../lib/whatsapp-phone";
 
 const router: IRouter = Router();
@@ -616,7 +617,12 @@ const availabilityQuery = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   preferred_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
   duration: z.coerce.number().int().positive().max(240).optional(),
+  search_days: z.coerce.number().int().min(0).max(3650).optional(),
 });
+
+// Search up to ten years by default so callers can offer the nearest real opening
+// even when a clinic has long scheduling lead times. Callers may lower the window.
+const DEFAULT_AVAILABILITY_SEARCH_DAYS = 3650;
 
 router.get("/availability", async (req, res): Promise<void> => {
   const auth = integration(res);
@@ -636,7 +642,16 @@ router.get("/availability", async (req, res): Promise<void> => {
   }
   try {
     const timeZone = await configuredTimeZone(getDb());
-    const dayOfWeek = new Date(`${parsed.data.date}T12:00:00Z`).getUTCDay();
+    const requestedDate = parsed.data.date;
+    const searchDays = parsed.data.search_days ?? DEFAULT_AVAILABILITY_SEARCH_DAYS;
+    const searchDates = Array.from({ length: searchDays + 1 }, (_, offset) => addLocalDays(requestedDate, offset));
+    const requestedDayStart = localTimeToUtc(requestedDate, "00:00", timeZone);
+    const searchEnd = localTimeToUtc(addLocalDays(searchDates[searchDates.length - 1], 1), "00:00", timeZone);
+    if (!requestedDayStart || !searchEnd) {
+      fail(res, 400, "INVALID_LOCAL_DATE", "The selected date cannot be represented in the clinic timezone");
+      return;
+    }
+
     const doctorFilters = [
       eq(doctorsTable.isAvailable, true),
       or(isNull(doctorsTable.medicalCenterId), eq(doctorsTable.medicalCenterId, auth.medicalCenterId))!,
@@ -669,23 +684,24 @@ router.get("/availability", async (req, res): Promise<void> => {
       doctors = doctors.filter((doctor) => /general\s*(practice|practitioner)|\bgp\b/i.test(doctor.specialization)
         || (doctor.categoryId != null && categoryIds.has(doctor.categoryId)));
     }
+
     if (doctors.length === 0) {
-      ok(res, { date: parsed.data.date, timezone: timeZone, available_slots: [] });
+      ok(res, {
+        requested_date: requestedDate,
+        date: requestedDate,
+        nearest_date: null,
+        searched_through: requestedDate,
+        search_days: searchDays,
+        timezone: timeZone,
+        available_slots: [],
+      });
       return;
     }
+
     const doctorIds = doctors.map((doctor) => doctor.id);
-    const schedules = await getDb().select().from(doctorSchedulesTable).where(and(
-      inArray(doctorSchedulesTable.doctorId, doctorIds),
-      eq(doctorSchedulesTable.dayOfWeek, dayOfWeek),
-    ));
-    const dayStart = localTimeToUtc(parsed.data.date, "00:00", timeZone);
-    const dayEnd = localTimeToUtc(addLocalDays(parsed.data.date, 1), "00:00", timeZone);
-    if (!dayStart || !dayEnd) {
-      fail(res, 400, "INVALID_LOCAL_DATE", "The selected date cannot be represented in the clinic timezone");
-      return;
-    }
+    const schedules = await getDb().select().from(doctorSchedulesTable).where(inArray(doctorSchedulesTable.doctorId, doctorIds));
     const blocks = await getDb().select().from(doctorUnavailablePeriodsTable).where(and(
-      sql`${doctorUnavailablePeriodsTable.startsAt} < ${dayEnd} AND ${doctorUnavailablePeriodsTable.endsAt} > ${dayStart}`,
+      sql`${doctorUnavailablePeriodsTable.startsAt} < ${searchEnd} AND ${doctorUnavailablePeriodsTable.endsAt} > ${requestedDayStart}`,
       or(isNull(doctorUnavailablePeriodsTable.doctorId), inArray(doctorUnavailablePeriodsTable.doctorId, doctorIds)),
     ));
     const booked = await getDb().select({
@@ -696,42 +712,62 @@ router.get("/availability", async (req, res): Promise<void> => {
     }).from(appointmentsTable).where(and(
       inArray(appointmentsTable.doctorId, doctorIds),
       notInArray(appointmentsTable.status, ["cancelled", "no_show"]),
-      sql`${appointmentsTable.scheduledAt} < ${dayEnd} AND (${appointmentsTable.scheduledAt} + (${appointmentsTable.durationMinutes} * interval '1 minute')) > ${dayStart}`,
+      sql`${appointmentsTable.scheduledAt} < ${searchEnd} AND (${appointmentsTable.scheduledAt} + (${appointmentsTable.durationMinutes} * interval '1 minute')) > ${requestedDayStart}`,
     ));
+
     const doctorById = new Map(doctors.map((doctor) => [doctor.id, doctor]));
-    const availableSlots: Array<{ doctor_id: number; doctor_name: string; start: string; end: string }> = [];
     const now = new Date();
     const preferredMinutes = parsed.data.preferred_time ? minutesOfDay(parsed.data.preferred_time) : null;
-    for (const rule of schedules) {
-      if ((rule.effectiveFrom && parsed.data.date < rule.effectiveFrom)
-        || (rule.effectiveUntil && parsed.data.date > rule.effectiveUntil)
-        || (parsed.data.duration && parsed.data.duration !== rule.slotDurationMinutes)) continue;
-      const startMinute = minutesOfDay(rule.startTime);
-      const endMinute = minutesOfDay(rule.endTime);
-      for (let minute = startMinute; minute + rule.slotDurationMinutes <= endMinute; minute += rule.slotDurationMinutes) {
-        if (preferredMinutes != null && minute < preferredMinutes) continue;
-        const localTime = `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
-        const start = localTimeToUtc(parsed.data.date, localTime, timeZone);
-        if (!start || start <= now) continue;
-        const end = new Date(start.getTime() + rule.slotDurationMinutes * 60_000);
-        const doctor = doctorById.get(rule.doctorId);
-        if (!doctor) continue;
-        const hasBlock = blocks.some((block) => (!block.doctorId || block.doctorId === rule.doctorId)
-          && block.startsAt < end && block.endsAt > start);
-        const hasBooking = booked.some((appointment) => appointment.doctorId === rule.doctorId
-          && appointment.start < end
-          && appointment.start.getTime() + appointment.duration * 60_000 > start.getTime());
-        if (hasBlock || hasBooking) continue;
-        availableSlots.push({
-          doctor_id: doctor.id,
-          doctor_name: `Dr. ${doctor.firstName} ${doctor.lastName}`.trim(),
-          start: start.toISOString(),
-          end: end.toISOString(),
-        });
+    const searchResult = findNearestWithAvailability(searchDates, (candidateDate) => {
+      const dayStart = localTimeToUtc(candidateDate, "00:00", timeZone);
+      const dayEnd = localTimeToUtc(addLocalDays(candidateDate, 1), "00:00", timeZone);
+      if (!dayStart || !dayEnd) return [];
+      const dayOfWeek = weekdayOfDate(candidateDate);
+      const dateSlots: Array<{ doctor_id: number; doctor_name: string; start: string; end: string }> = [];
+      for (const rule of schedules) {
+        if (rule.dayOfWeek !== dayOfWeek
+          || (rule.effectiveFrom && candidateDate < rule.effectiveFrom)
+          || (rule.effectiveUntil && candidateDate > rule.effectiveUntil)
+          || (parsed.data.duration && parsed.data.duration !== rule.slotDurationMinutes)) continue;
+        const startMinute = minutesOfDay(rule.startTime);
+        const endMinute = minutesOfDay(rule.endTime);
+        for (let minute = startMinute; minute + rule.slotDurationMinutes <= endMinute; minute += rule.slotDurationMinutes) {
+          if (preferredMinutes != null && minute < preferredMinutes) continue;
+          const localTime = `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+          const start = localTimeToUtc(candidateDate, localTime, timeZone);
+          if (!start || start <= now) continue;
+          const end = new Date(start.getTime() + rule.slotDurationMinutes * 60_000);
+          const doctor = doctorById.get(rule.doctorId);
+          if (!doctor) continue;
+          const hasBlock = blocks.some((block) => (!block.doctorId || block.doctorId === rule.doctorId)
+            && block.startsAt < end && block.endsAt > start);
+          const hasBooking = booked.some((appointment) => appointment.doctorId === rule.doctorId
+            && appointment.start < end
+            && appointment.start.getTime() + appointment.duration * 60_000 > start.getTime());
+          if (hasBlock || hasBooking) continue;
+          dateSlots.push({
+            doctor_id: doctor.id,
+            doctor_name: `Dr. ${doctor.firstName} ${doctor.lastName}`.trim(),
+            start: start.toISOString(),
+            end: end.toISOString(),
+          });
+        }
       }
-    }
-    availableSlots.sort((a, b) => a.start.localeCompare(b.start) || a.doctor_id - b.doctor_id);
-    ok(res, { date: parsed.data.date, timezone: timeZone, available_slots: availableSlots });
+      dateSlots.sort((a, b) => a.start.localeCompare(b.start) || a.doctor_id - b.doctor_id);
+      return dateSlots;
+    });
+    const resolvedDate = searchResult.date;
+    const searchedThrough = searchResult.searchedThrough ?? requestedDate;
+    const availableSlots = searchResult.available;
+    ok(res, {
+      requested_date: requestedDate,
+      date: resolvedDate ?? requestedDate,
+      nearest_date: resolvedDate,
+      searched_through: searchedThrough,
+      search_days: searchDays,
+      timezone: timeZone,
+      available_slots: availableSlots,
+    });
   } catch (error) {
     if (error instanceof SchedulingError) {
       fail(res, error.code === "SCHEDULING_NOT_CONFIGURED" ? 501 : 400, error.code, error.message);
