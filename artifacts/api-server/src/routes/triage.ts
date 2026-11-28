@@ -6,7 +6,7 @@ import { clinicTasksTable, db, doctorsTable, pool, triageDispatchesTable } from 
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@workspace/db/schema";
 import { getDb } from "../lib/tenant";
-import { getSessionUser, requireAuth } from "../lib/session";
+import { getSessionUser, requireAuth, type AppRole } from "../lib/session";
 import { tenantSchemaName } from "../lib/tenant-schema";
 import { logger } from "../lib/logger";
 
@@ -17,6 +17,10 @@ const MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/oy58jmqrna29ccwd8t5u2hggxit1
 const DEPARTMENTS = ["Reception", "Doctor", "Pharmacy", "Billing", "IT"] as const;
 const PRIORITIES = ["Low", "Medium", "High", "Critical"] as const;
 
+/** The requestor roles Make.com understands. */
+const MAKE_REQUESTOR_ROLES = ["Patient", "Nurse", "Doctor", "Manager", "Vendor"] as const;
+type MakeRequestorRole = (typeof MAKE_REQUESTOR_ROLES)[number];
+
 const dispatchSchema = z.object({
   message: z.string().trim().min(1),
 });
@@ -24,13 +28,25 @@ const dispatchSchema = z.object({
 const taskCallbackSchema = z.object({
   external_event_id: z.string().min(1),
   task_title: z.string().min(1),
-  requestor_role: z.enum(["Patient", "Nurse", "Doctor", "Manager", "Vendor"]),
+  requestor_role: z.enum(MAKE_REQUESTOR_ROLES),
   department: z.enum(DEPARTMENTS),
   priority: z.enum(PRIORITIES),
   status: z.enum(["Open", "In Progress", "Pending Registration", "Resolved"]).default("Open"),
   patient_identifier: z.string().nullable().optional(),
   assigned_person: z.string().nullable().optional(),
   original_message: z.string().min(1),
+});
+
+// Make.com sometimes echoes the original dispatch payload back to the callback
+// endpoint instead of the normalised task object. We accept that shape too and
+// fill in sensible defaults so the ticket still reaches the Operator queue.
+const dispatchEchoSchema = z.object({
+  sender: z.string().optional(),
+  requestor_role: z.string().optional(),
+  event_id: z.string().min(1).optional(),
+  external_event_id: z.string().min(1).optional(),
+  message: z.string().min(1).optional(),
+  timestamp: z.string().optional(),
 });
 
 // A triage task can be updated in several ways:
@@ -51,10 +67,29 @@ const patchTaskSchema = z.object({
   { message: "At least one field must be provided" },
 );
 
-function generateEventId(sender: string, message: string): string {
+/** `evt_cams_<current_date>_<hash of message>`, per the integration contract. */
+function generateEventId(message: string): string {
   const date = new Date().toISOString().slice(0, 10).replaceAll("-", "_");
-  const senderAndBodyHash = crypto.createHash("sha256").update(`${sender}${message}`).digest("hex").slice(0, 12);
-  return `evt_cams_${date}_${senderAndBodyHash}`;
+  const messageHash = crypto.createHash("sha256").update(message).digest("hex").slice(0, 12);
+  return `evt_cams_${date}_${messageHash}`;
+}
+
+/** Map a HealthNexus role to the Make.com requestor_role vocabulary. */
+function toMakeRequestorRole(role: AppRole): MakeRequestorRole {
+  switch (role) {
+    case "doctor": return "Doctor";
+    case "nurse": return "Nurse";
+    case "patient": return "Patient";
+    case "pharmacist":
+    case "pharmacy": return "Vendor";
+    default: return "Manager"; // admin, receptionist, accountant, operator, pending
+  }
+}
+
+/** Coerce an arbitrary incoming role string into a valid Make.com role. */
+function normaliseRequestorRole(value: string | undefined): MakeRequestorRole {
+  const wanted = value?.trim().toLowerCase();
+  return MAKE_REQUESTOR_ROLES.find((role) => role.toLowerCase() === wanted) ?? "Manager";
 }
 
 router.post("/triage/dispatch", requireAuth, async (req, res): Promise<void> => {
@@ -71,8 +106,10 @@ router.post("/triage/dispatch", requireAuth, async (req, res): Promise<void> => 
   }
   const { message } = parsed.data;
   const sender = user.email;
-  const requestor_role = user.role.charAt(0).toUpperCase() + user.role.slice(1);
-  const event_id = generateEventId(sender, message);
+  const requestor_role = toMakeRequestorRole(user.role);
+  const event_id = generateEventId(message);
+  const timestamp = new Date().toISOString();
+  const payload = { sender, requestor_role, event_id, message, timestamp };
 
   try {
     await db.insert(triageDispatchesTable).values({
@@ -87,18 +124,19 @@ router.post("/triage/dispatch", requireAuth, async (req, res): Promise<void> => 
     const response = await fetch(MAKE_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sender, requestor_role, event_id, message }),
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(10_000),
     });
     const responseBody = await response.text().catch(() => "");
 
     if (!response.ok) {
-      logger.warn({ status: response.status, responseBody }, "Make.com webhook responded with error");
+      logger.warn({ status: response.status, responseBody, payload }, "Make.com webhook responded with error");
       res.status(502).json({ error: "Make.com webhook unreachable", status: response.status });
       return;
     }
 
-    res.json({ success: true, event_id, response_body: responseBody });
+    logger.info({ event_id, requestor_role, sender }, "Dispatched triage message to Make.com");
+    res.json({ success: true, event_id, payload, response_body: responseBody });
   } catch (err) {
     logger.error({ err }, "Failed to dispatch triage message to Make.com");
     res.status(502).json({ error: "Failed to reach Make.com webhook" });
@@ -106,20 +144,64 @@ router.post("/triage/dispatch", requireAuth, async (req, res): Promise<void> => 
 });
 
 router.post("/triage/tasks", async (req, res): Promise<void> => {
-  const parsed = taskCallbackSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid input", details: parsed.error.issues });
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const bodyKeys = Object.keys(body);
+
+  // A `{}` body means the Make.com HTTP module is sending no mapped fields.
+  if (bodyKeys.length === 0) {
+    logger.warn(
+      { ip: req.ip, contentType: req.headers["content-type"] },
+      "Make.com triage callback received an empty body — check the HTTP module Body mapping",
+    );
+    res.status(400).json({
+      error: "Empty callback body",
+      hint: "In the Make.com scenario, map the task fields into the HTTP module body: external_event_id, task_title, requestor_role, department, priority, original_message.",
+    });
     return;
   }
 
-  const data = parsed.data;
+  const parsed = taskCallbackSchema.safeParse(body);
+  let data: z.infer<typeof taskCallbackSchema>;
+
+  if (parsed.success) {
+    data = parsed.data;
+  } else {
+    // Fallback: the scenario echoed the dispatch payload instead of the
+    // normalised task. Turn it into a ticket the Operator can route.
+    const echo = dispatchEchoSchema.safeParse(body);
+    const eventId = echo.success ? echo.data.event_id ?? echo.data.external_event_id : undefined;
+    const message = echo.success ? echo.data.message : undefined;
+    if (!eventId || !message) {
+      logger.warn({ bodyKeys, issues: parsed.error.issues }, "Make.com triage callback body was not recognised");
+      res.status(400).json({
+        error: "Invalid input",
+        details: parsed.error.issues,
+        received_keys: bodyKeys,
+      });
+      return;
+    }
+    const title = message.length > 80 ? `${message.slice(0, 77)}…` : message;
+    data = {
+      external_event_id: eventId,
+      task_title: title,
+      requestor_role: normaliseRequestorRole(echo.data!.requestor_role),
+      department: "Reception",
+      priority: "Medium",
+      status: "Open",
+      patient_identifier: null,
+      assigned_person: null,
+      original_message: message,
+    };
+    logger.info({ eventId }, "Make.com callback echoed the dispatch payload; creating task with defaults");
+  }
+
   let client: any;
   try {
     const dispatch = await db.query.triageDispatchesTable.findFirst({
       where: eq(triageDispatchesTable.externalEventId, data.external_event_id),
     });
     if (!dispatch) {
-      res.status(404).json({ error: "Unknown dispatch event" });
+      res.status(404).json({ error: "Unknown dispatch event", external_event_id: data.external_event_id });
       return;
     }
 

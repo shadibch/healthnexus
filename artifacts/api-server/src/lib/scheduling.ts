@@ -7,7 +7,7 @@ import {
   doctorsTable,
 } from "@workspace/db";
 import { localDateText, matchesScheduleSlot, partsInTimeZone, validTimeZone } from "./whatsapp-time";
-export { addLocalDays, intervalsOverlap, localDateText, localTimeToUtc, matchesScheduleSlot, minutesOfDay, partsInTimeZone, validTimeZone } from "./whatsapp-time";
+export { addLocalDays, intervalsOverlap, localDateText, localTimeToUtc, matchesScheduleSlot, minutesOfDay, partsInTimeZone, validTimeZone, weekdayOfDate } from "./whatsapp-time";
 
 export class SchedulingError extends Error {
   constructor(
@@ -18,17 +18,81 @@ export class SchedulingError extends Error {
   }
 }
 
+/** Fallback clinic timezone when the clinic has not configured one yet. */
+export const DEFAULT_TIME_ZONE = process.env.DEFAULT_TIME_ZONE?.trim() || "Asia/Dubai";
+
+/** Fallback working hours used for doctors that have no schedule configured. */
+const DEFAULT_START_TIME = "09:00";
+const DEFAULT_END_TIME = "17:00";
+const DEFAULT_SLOT_MINUTES = 30;
+
+export interface ScheduleRule {
+  doctorId: number;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  slotDurationMinutes: number;
+  effectiveFrom: string | null;
+  effectiveUntil: string | null;
+}
+
+/** A synthetic 09:00–17:00 / 30-minute schedule for a doctor with no rules. */
+export function defaultScheduleRule(doctorId: number, dayOfWeek: number): ScheduleRule {
+  return {
+    doctorId,
+    dayOfWeek,
+    startTime: DEFAULT_START_TIME,
+    endTime: DEFAULT_END_TIME,
+    slotDurationMinutes: DEFAULT_SLOT_MINUTES,
+    effectiveFrom: null,
+    effectiveUntil: null,
+  };
+}
+
+let warnedDefaultTimeZone = false;
+
 export async function configuredTimeZone(executor: any): Promise<string> {
   const [settings] = await executor.select({ timeZone: clinicSettingsTable.timeZone })
     .from(clinicSettingsTable).limit(1);
-  if (!settings?.timeZone) {
-    throw new SchedulingError("SCHEDULING_NOT_CONFIGURED", "Set the clinic timezone before using scheduling");
+  const configured = settings?.timeZone?.trim();
+  const timeZone = configured || DEFAULT_TIME_ZONE;
+  if (!configured && !warnedDefaultTimeZone) {
+    warnedDefaultTimeZone = true;
+    // eslint-disable-next-line no-console
+    console.warn(`[scheduling] clinic timezone not configured; defaulting to ${DEFAULT_TIME_ZONE}`);
   }
-  if (!validTimeZone(settings.timeZone)) {
+  if (!validTimeZone(timeZone)) {
     throw new SchedulingError("INVALID_TIME_ZONE", "The configured clinic timezone is not a valid IANA timezone");
   }
-  return settings.timeZone;
+  return timeZone;
 }
+
+/**
+ * Effective schedule rules for a doctor on a given clinic-local day.
+ *
+ * If the doctor has no schedule rows at all we fall back to a sensible default
+ * (09:00–17:00, 30-minute slots) so availability is never empty just because
+ * the schedule has not been configured yet. If the doctor *does* have rules
+ * but none apply to this day (e.g. a day off) we return an empty list.
+ */
+export async function getScheduleRulesForDay(
+  executor: any,
+  doctorId: number,
+  dayOfWeek: number,
+  dateStr: string,
+): Promise<ScheduleRule[]> {
+  const all = await executor.select().from(doctorSchedulesTable)
+    .where(eq(doctorSchedulesTable.doctorId, doctorId)) as ScheduleRule[];
+  const forDay = all.filter((rule) =>
+    rule.dayOfWeek === dayOfWeek
+    && (!rule.effectiveFrom || rule.effectiveFrom <= dateStr)
+    && (!rule.effectiveUntil || rule.effectiveUntil >= dateStr),
+  );
+  if (forDay.length > 0) return forDay;
+  if (all.length === 0) return [defaultScheduleRule(doctorId, dayOfWeek)];
+  return [];
+}
+
 
 /** Validate a slot and serialize all HealthNexus API writers by tenant/doctor. */
 export async function validateAndLockSlot(
@@ -45,11 +109,8 @@ export async function validateAndLockSlot(
   const timeZone = await configuredTimeZone(tx);
   const local = partsInTimeZone(start, timeZone);
   const localDate = localDateText(local);
-  const schedules = await tx.select().from(doctorSchedulesTable).where(and(
-    eq(doctorSchedulesTable.doctorId, doctorId),
-    eq(doctorSchedulesTable.dayOfWeek, local.weekday),
-  ));
-  const schedule = schedules.find((rule: typeof doctorSchedulesTable.$inferSelect) => matchesScheduleSlot(rule, local, localDate));
+  const schedules = await getScheduleRulesForDay(tx, doctorId, local.weekday, localDate);
+  const schedule = schedules.find((rule: ScheduleRule) => matchesScheduleSlot(rule, local, localDate));
   if (!schedule || start.getUTCMilliseconds() !== 0) {
     throw new SchedulingError("SLOT_UNAVAILABLE", "The requested time does not match a configured doctor schedule slot");
   }

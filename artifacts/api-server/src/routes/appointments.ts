@@ -1,6 +1,6 @@
 ﻿import { Router, type IRouter } from "express";
-import { eq, and, gte, lt, isNull, notInArray, or, sql } from "drizzle-orm";
-import { appointmentsTable, patientsTable, doctorsTable, doctorSchedulesTable, doctorUnavailablePeriodsTable, appointmentHistoryTable } from "@workspace/db";
+import { eq, and, gte, lt, isNull, notInArray, or, sql, ilike } from "drizzle-orm";
+import { appointmentsTable, patientsTable, doctorsTable, doctorUnavailablePeriodsTable, appointmentHistoryTable } from "@workspace/db";
 import {
   ListAppointmentsQueryParams,
   CreateAppointmentBody,
@@ -12,7 +12,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth, getSessionUser } from "../lib/session";
 import { getDb } from "../lib/tenant";
-import { addLocalDays, configuredTimeZone, localTimeToUtc, minutesOfDay, partsInTimeZone, SchedulingError, validateAndLockSlot } from "../lib/scheduling";
+import { addLocalDays, configuredTimeZone, getScheduleRulesForDay, localTimeToUtc, minutesOfDay, partsInTimeZone, SchedulingError, validateAndLockSlot, weekdayOfDate } from "../lib/scheduling";
 
 const router: IRouter = Router();
 
@@ -36,44 +36,37 @@ async function getMaps() {
   return { patientMap, doctorMap };
 }
 
-// ── Available slots for a doctor on a date ────────────────────────────────────
-// GET /appointments/slots?doctorId=1&date=2026-05-03
-router.get("/appointments/slots", requireAuth, async (req, res): Promise<void> => {
-  const doctorId = parseInt(req.query.doctorId as string);
-  const dateStr = req.query.date as string;
+// ── Slot computation ──────────────────────────────────────────────────────────
+interface SlotInfo {
+  time: string;
+  available: boolean;
+  booked: boolean;
+  past: boolean;
+}
 
-  if (!doctorId || !dateStr) {
-    res.status(400).json({ error: "doctorId and date are required" }); return;
-  }
-
-  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+function isValidDateString(dateStr: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
   const date = new Date(`${dateStr}T00:00:00Z`);
-  if (!dateMatch || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== dateStr) {
-    res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD" }); return;
-  }
+  return !!match && !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === dateStr;
+}
 
+/** Build every configured slot for a doctor on a clinic-local date. */
+async function computeSlotsForDoctor(
+  doctorId: number,
+  dateStr: string,
+): Promise<{ doctor: typeof doctorsTable.$inferSelect; timeZone: string; slots: SlotInfo[] } | null> {
   const [doctor] = await getDb().select().from(doctorsTable).where(eq(doctorsTable.id, doctorId)).limit(1);
-  if (!doctor) { res.status(404).json({ error: "Doctor not found" }); return; }
-  if (!doctor.isAvailable) { res.status(200).json({ doctorId, date: dateStr, slots: [] }); return; }
+  if (!doctor) return null;
 
-  let timeZone: string;
-  try {
-    timeZone = await configuredTimeZone(getDb());
-  } catch (error) {
-    res.status(503).json({ error: error instanceof Error ? error.message : "Clinic timezone not configured" });
-    return;
-  }
-  const dayOfWeek = new Date(`${dateStr}T12:00:00Z`).getUTCDay();
+  const timeZone = await configuredTimeZone(getDb());
+  if (!doctor.isAvailable) return { doctor, timeZone, slots: [] };
+
+  const dayOfWeek = weekdayOfDate(dateStr);
   const dayStart = localTimeToUtc(dateStr, "00:00", timeZone);
   const dayEnd = localTimeToUtc(addLocalDays(dateStr, 1), "00:00", timeZone);
-  if (!dayStart || !dayEnd) { res.status(400).json({ error: "Date invalid in clinic timezone" }); return; }
-  const rules = await getDb().select().from(doctorSchedulesTable).where(and(
-    eq(doctorSchedulesTable.doctorId, doctorId), eq(doctorSchedulesTable.dayOfWeek, dayOfWeek),
-  ));
-  const relevantRules = rules.filter((rule) =>
-    (!rule.effectiveFrom || rule.effectiveFrom <= dateStr)
-    && (!rule.effectiveUntil || rule.effectiveUntil >= dateStr),
-  );
+  if (!dayStart || !dayEnd) return { doctor, timeZone, slots: [] };
+
+  const rules = await getScheduleRulesForDay(getDb(), doctorId, dayOfWeek, dateStr);
   const booked = await getDb().select({ scheduledAt: appointmentsTable.scheduledAt, duration: appointmentsTable.durationMinutes, status: appointmentsTable.status })
     .from(appointmentsTable).where(and(
       eq(appointmentsTable.doctorId, doctorId),
@@ -85,8 +78,8 @@ router.get("/appointments/slots", requireAuth, async (req, res): Promise<void> =
     sql`${doctorUnavailablePeriodsTable.startsAt} < ${dayEnd} AND ${doctorUnavailablePeriodsTable.endsAt} > ${dayStart}`,
   ));
   const now = new Date();
-  const slotMap = new Map<string, { time: string; available: boolean; booked: boolean; past: boolean }>();
-  for (const rule of relevantRules) {
+  const slotMap = new Map<string, SlotInfo>();
+  for (const rule of rules) {
     for (let minute = minutesOfDay(rule.startTime); minute + rule.slotDurationMinutes <= minutesOfDay(rule.endTime); minute += rule.slotDurationMinutes) {
       const time = `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
       const start = localTimeToUtc(dateStr, time, timeZone);
@@ -99,7 +92,91 @@ router.get("/appointments/slots", requireAuth, async (req, res): Promise<void> =
       slotMap.set(time, { time, available: !past && !isBooked && !isBlocked, booked: isBooked || isBlocked, past });
     }
   }
-  res.json({ doctorId, date: dateStr, timezone: timeZone, slots: [...slotMap.values()] });
+  return { doctor, timeZone, slots: [...slotMap.values()] };
+}
+
+// ── Available slots for a doctor on a date ────────────────────────────────────
+// GET /appointments/slots?doctorId=1&date=2026-05-03
+router.get("/appointments/slots", requireAuth, async (req, res): Promise<void> => {
+  const doctorId = parseInt(req.query.doctorId as string);
+  const dateStr = req.query.date as string;
+
+  if (!doctorId || !dateStr) {
+    res.status(400).json({ error: "doctorId and date are required" }); return;
+  }
+  if (!isValidDateString(dateStr)) {
+    res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD" }); return;
+  }
+
+  try {
+    const result = await computeSlotsForDoctor(doctorId, dateStr);
+    if (!result) { res.status(404).json({ error: "Doctor not found" }); return; }
+    res.json({ doctorId, date: dateStr, timezone: result.timeZone, slots: result.slots });
+  } catch (error) {
+    if (error instanceof SchedulingError) {
+      res.status(503).json({ error: error.message, code: error.code }); return;
+    }
+    throw error;
+  }
+});
+
+// ── Availability for specialists (doctor / specialization) ────────────────────
+// GET /appointments/availability?specialization=Cardiology&date=2026-11-30&days=7
+//   doctorId      optional — restrict to one doctor
+//   specialization optional — match doctors whose specialization contains it
+//   date          optional — first clinic-local date (defaults to today)
+//   days          optional — number of days to return (1–14, default 1)
+router.get("/appointments/availability", requireAuth, async (req, res): Promise<void> => {
+  const specialization = typeof req.query.specialization === "string" && req.query.specialization.trim()
+    ? req.query.specialization.trim()
+    : undefined;
+  const doctorId = req.query.doctorId != null ? parseInt(String(req.query.doctorId)) : undefined;
+  const dateStr = typeof req.query.date === "string" && req.query.date
+    ? req.query.date
+    : new Date().toISOString().slice(0, 10);
+  const days = Math.min(Math.max(parseInt(String(req.query.days ?? "1")) || 1, 1), 14);
+
+  if (doctorId != null && !Number.isFinite(doctorId)) {
+    res.status(400).json({ error: "Invalid doctorId" }); return;
+  }
+  if (!isValidDateString(dateStr)) {
+    res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD" }); return;
+  }
+
+  let doctors;
+  if (doctorId != null) {
+    doctors = await getDb().select().from(doctorsTable).where(eq(doctorsTable.id, doctorId));
+  } else if (specialization) {
+    doctors = await getDb().select().from(doctorsTable).where(ilike(doctorsTable.specialization, `%${specialization}%`));
+  } else {
+    doctors = await getDb().select().from(doctorsTable);
+  }
+  doctors = doctors.filter((doctor) => doctor.isAvailable);
+
+  try {
+    const out = [];
+    for (const doctor of doctors) {
+      const dayResults = [];
+      for (let offset = 0; offset < days; offset += 1) {
+        const day = addLocalDays(dateStr, offset);
+        const computed = await computeSlotsForDoctor(doctor.id, day);
+        dayResults.push({ date: day, slots: computed?.slots ?? [] });
+      }
+      out.push({
+        id: doctor.id,
+        firstName: doctor.firstName,
+        lastName: doctor.lastName,
+        specialization: doctor.specialization,
+        days: dayResults,
+      });
+    }
+    res.json({ from: dateStr, days, doctors: out });
+  } catch (error) {
+    if (error instanceof SchedulingError) {
+      res.status(503).json({ error: error.message, code: error.code }); return;
+    }
+    throw error;
+  }
 });
 
 router.get("/appointments/today", requireAuth, async (req, res): Promise<void> => {
@@ -166,18 +243,28 @@ router.get("/appointments", requireAuth, async (req, res): Promise<void> => {
   res.json(sliced.map((a) => enrichAppointment(a, patientMap, doctorMap)));
 });
 
-// ── Patient self-book ─────────────────────────────────────────────────────────
-// POST /appointments/book  (patient only)
+// ── Book a patient into a specific slot ───────────────────────────────────────
+// POST /appointments/book
+//   Patients book for themselves (patientId is ignored).
+//   Staff (doctor / nurse / receptionist / admin) must pass patientId.
 router.post("/appointments/book", requireAuth, async (req, res): Promise<void> => {
   const session = getSessionUser(req)!;
-  if (!session.roles.includes("patient") || !session.patientDbId) {
-    res.status(403).json({ error: "Only patients can use self-booking" }); return;
+  const isPatient = session.roles.includes("patient") && session.patientDbId != null;
+  const isStaff = ["doctor", "nurse", "receptionist", "admin"].some((r) => (session.roles as string[]).includes(r));
+  if (!isPatient && !isStaff) {
+    res.status(403).json({ error: "Only staff or patients can book appointments" }); return;
   }
 
   const { doctorId, scheduledAt, type = "routine", notes } = req.body;
   if (!doctorId || !scheduledAt) {
     res.status(400).json({ error: "doctorId and scheduledAt are required" }); return;
   }
+
+  const patientId = isPatient ? session.patientDbId! : Number(req.body.patientId);
+  if (!Number.isFinite(patientId) || patientId <= 0) {
+    res.status(400).json({ error: "patientId is required when staff book on behalf of a patient" }); return;
+  }
+  const source = isPatient ? "patient" : "clinic";
 
   const slotDate = new Date(scheduledAt);
   if (isNaN(slotDate.getTime())) {
@@ -205,18 +292,18 @@ router.post("/appointments/book", requireAuth, async (req, res): Promise<void> =
         queueNumber = (count?.value ?? 0) + 1;
       }
       const [created] = await tx.insert(appointmentsTable).values({
-        patientId: session.patientDbId!,
+        patientId,
         doctorId: Number(doctorId),
         scheduledAt: slotDate,
         durationMinutes: slot.durationMinutes,
-        source: "patient",
+        source,
         type,
         status: "scheduled",
         notes: notes ?? null,
         queueNumber,
       }).returning();
       await tx.insert(appointmentHistoryTable).values({
-        appointmentId: created.id, action: "booked", source: "patient",
+        appointmentId: created.id, action: "booked", source,
         nextDoctorId: created.doctorId, nextScheduledAt: created.scheduledAt, actorId: session.userId,
       });
       return created;

@@ -151,6 +151,7 @@ function BookDialog({
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [apptType, setApptType] = useState<string>("routine");
   const [notes, setNotes] = useState("");
+  const [findingNext, setFindingNext] = useState(false);
 
   const totalSteps = isReschedule ? 2 : 3;
 
@@ -234,6 +235,34 @@ function BookDialog({
   const availableSlots = slotsData?.slots.filter((s) => s.available) ?? [];
   const now = new Date();
 
+  async function findNextAvailable() {
+    if (!activeDoctor) return;
+    setFindingNext(true);
+    try {
+      const res = await apiFetch<{ doctors: Array<{ days: Array<{ date: string; slots: Slot[] }> }> }>(
+        `/appointments/availability?doctorId=${activeDoctor.id}&date=${todayISO()}&days=14`,
+      );
+      const days = res.doctors?.[0]?.days ?? [];
+      const next = days.find((d) => d.slots.some((s) => s.available));
+      if (next) {
+        setSelectedDate(next.date);
+        setSelectedSlot(null);
+      } else {
+        toast({
+          title: lang === "ar" ? "لا توجد مواعيد متاحة" : "No availability",
+          description: lang === "ar"
+            ? "لا توجد مواعيد متاحة خلال الأسبوعين القادمين"
+            : "No open slots in the next 14 days",
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
+      toast({ title: lang === "ar" ? "خطأ" : "Error", description: e?.message, variant: "destructive" });
+    } finally {
+      setFindingNext(false);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); else handleOpen(); }}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -315,6 +344,8 @@ function BookDialog({
               onSelect={setSelectedSlot}
               isRTL={isRTL}
               lang={lang}
+              onFindNext={findNextAvailable}
+              findingNext={findingNext}
             />
 
             <div className={cn("flex gap-2 pt-2", isRTL && "flex-row-reverse")}>
@@ -466,13 +497,15 @@ function BookDialog({
 }
 
 // ─── Slot Picker ──────────────────────────────────────────────────────────────
-function SlotPicker({ slots, loading, selected, onSelect, isRTL, lang }: {
+function SlotPicker({ slots, loading, selected, onSelect, isRTL, lang, onFindNext, findingNext }: {
   slots: Slot[];
   loading: boolean;
   selected: string | null;
   onSelect: (t: string) => void;
   isRTL: boolean;
   lang: string;
+  onFindNext?: () => void;
+  findingNext?: boolean;
 }) {
   const morningSlots = slots.filter((s) => {
     const h = parseInt(s.time.split(":")[0]);
@@ -493,13 +526,31 @@ function SlotPicker({ slots, loading, selected, onSelect, isRTL, lang }: {
   }
 
   const available = slots.filter((s) => s.available);
-  if (slots.length === 0) return null;
+  const allPast = slots.length > 0 && slots.every((s) => s.past);
+
+  const EmptyState = ({ message }: { message: string }) => (
+    <div className="py-4 text-center text-sm text-muted-foreground border border-dashed rounded-lg space-y-2">
+      <p>{message}</p>
+      {onFindNext && (
+        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={onFindNext} disabled={findingNext}>
+          {findingNext ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CalendarDays className="w-3.5 h-3.5" />}
+          {lang === "ar" ? "ابحث عن أقرب موعد متاح" : "Find next available day"}
+        </Button>
+      )}
+    </div>
+  );
+
+  if (slots.length === 0) {
+    return <EmptyState message={lang === "ar" ? "لا توجد مواعيد لهذا اليوم — اختر تاريخاً آخر" : "No slots for this day — try another date"} />;
+  }
 
   if (available.length === 0) {
     return (
-      <div className="py-4 text-center text-sm text-muted-foreground border border-dashed rounded-lg">
-        {lang === "ar" ? "لا توجد مواعيد متاحة في هذا اليوم — اختر تاريخاً آخر" : "No available slots on this day — try another date"}
-      </div>
+      <EmptyState
+        message={allPast
+          ? (lang === "ar" ? "انتهت كل مواعيد هذا اليوم — اختر تاريخاً آخر" : "All of today's slots have passed — try another date")
+          : (lang === "ar" ? "لا توجد مواعيد متاحة في هذا اليوم — اختر تاريخاً آخر" : "No available slots on this day — try another date")}
+      />
     );
   }
 

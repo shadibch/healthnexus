@@ -25,7 +25,7 @@ import {
   requireClinicAdmin,
 } from "../lib/whatsapp-auth";
 import { logger } from "../lib/logger";
-import { addLocalDays, configuredTimeZone, localTimeToUtc, minutesOfDay, partsInTimeZone, localDateText, SchedulingError, validTimeZone, validateAndLockSlot } from "../lib/scheduling";
+import { addLocalDays, configuredTimeZone, defaultScheduleRule, localTimeToUtc, minutesOfDay, partsInTimeZone, localDateText, SchedulingError, validTimeZone, validateAndLockSlot } from "../lib/scheduling";
 import { findNearestWithAvailability, weekdayOfDate } from "../lib/whatsapp-time";
 import { normalizeWhatsappPhone } from "../lib/whatsapp-phone";
 
@@ -699,6 +699,21 @@ router.get("/availability", async (req, res): Promise<void> => {
 
     const doctorIds = doctors.map((doctor) => doctor.id);
     const schedules = await getDb().select().from(doctorSchedulesTable).where(inArray(doctorSchedulesTable.doctorId, doctorIds));
+    // Doctors with no schedule configured fall back to default 09:00–17:00
+    // 30-minute slots so availability is not silently empty.
+    const doctorsWithSchedules = new Set(schedules.map((rule) => rule.doctorId));
+    const effectiveSchedules: typeof schedules = [...schedules];
+    for (const doctor of doctors) {
+      if (!doctorsWithSchedules.has(doctor.id)) {
+        for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek += 1) {
+          effectiveSchedules.push({
+            ...defaultScheduleRule(doctor.id, dayOfWeek),
+            id: -1,
+            createdAt: new Date(),
+          } as (typeof schedules)[number]);
+        }
+      }
+    }
     const blocks = await getDb().select().from(doctorUnavailablePeriodsTable).where(and(
       sql`${doctorUnavailablePeriodsTable.startsAt} < ${searchEnd} AND ${doctorUnavailablePeriodsTable.endsAt} > ${requestedDayStart}`,
       or(isNull(doctorUnavailablePeriodsTable.doctorId), inArray(doctorUnavailablePeriodsTable.doctorId, doctorIds)),
@@ -723,7 +738,7 @@ router.get("/availability", async (req, res): Promise<void> => {
       if (!dayStart || !dayEnd) return [];
       const dayOfWeek = weekdayOfDate(candidateDate);
       const dateSlots: Array<{ doctor_id: number; doctor_name: string; start: string; end: string }> = [];
-      for (const rule of schedules) {
+      for (const rule of effectiveSchedules) {
         if (rule.dayOfWeek !== dayOfWeek
           || (rule.effectiveFrom && candidateDate < rule.effectiveFrom)
           || (rule.effectiveUntil && candidateDate > rule.effectiveUntil)
