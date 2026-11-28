@@ -100,6 +100,90 @@ Copy `.env.example` → `.env` and fill in what you need. Most are optional.
 
 ---
 
+## WhatsApp / Make.com integration
+
+### 1. Create an API token (clinic admin, once)
+
+Integration endpoints (`/api/whatsapp/availability`, `/appointments`, `/patients`,
+`/doctors`, `/conversations/*`) authenticate with a **bearer token**, not the
+browser session. Create one while signed in as a clinic admin:
+
+```bash
+curl -X POST https://healthnexus-api.onrender.com/api/whatsapp/credentials \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{"name":"Make.com"}'
+```
+
+The response contains `token` (`hnwa_...`). It is shown **once** — copy it and
+put it in Make.com as an HTTP header:
+
+```
+Authorization: Bearer hnwa_...
+```
+
+Revoke it with `DELETE /api/whatsapp/credentials/:id`. The credential
+management routes (`/credentials`, `/schedule-rules`, `/unavailable-periods`,
+`/time-zone`) only accept the admin session cookie.
+
+### 2. Find available slots
+
+```bash
+curl "https://healthnexus-api.onrender.com/api/whatsapp/availability?medical_center_id=1&date=2026-11-30&specialization=General%20Practice" \
+  -H "Authorization: Bearer hnwa_..."
+```
+
+`medical_center_id` must match the token's clinic. Optional filters:
+`doctor_id`, `category_id`, `specialization`, `preferred_time`, `duration`,
+`search_days` (0–2). Doctors with no configured schedule default to
+09:00–17:00 / 30-minute slots, and if the clinic has not set a timezone the
+server falls back to `Asia/Dubai` (override with `DEFAULT_TIME_ZONE`).
+
+### 3. Book a slot
+
+```bash
+curl -X POST https://healthnexus-api.onrender.com/api/whatsapp/appointments \
+  -H "Authorization: Bearer hnwa_..." -H "Content-Type: application/json" \
+  -d '{
+    "medical_center_id": 1,
+    "patient_id": 1,
+    "doctor_id": 2,
+    "scheduled_at": "2026-11-30T05:00:00.000Z",
+    "whatsapp_number": "+971501234567",
+    "idempotency_key": "wa-booking-0001",
+    "confirmed": true
+  }'
+```
+
+### 4. Triage dispatch → Make.com → callback
+
+`POST /api/triage/dispatch` (session auth) sends this JSON to the Make webhook:
+
+```json
+{
+  "sender": "nurse@clinicflow.ae",
+  "requestor_role": "Nurse",
+  "event_id": "evt_cams_2026_11_28_3f9a1c0b7d2e",
+  "message": "Patient in room 3 needs assistance",
+  "timestamp": "2026-11-28T09:35:00.000Z"
+}
+```
+
+- `sender` is the signed-in username (email).
+- `requestor_role` is one of `Patient | Nurse | Doctor | Manager | Vendor`.
+- `event_id` is `evt_cams_<YYYY_MM_DD>_<sha256(message)[:12]>`.
+
+Make.com must call back `POST /api/triage/tasks` with a JSON body containing
+`external_event_id`, `task_title`, `requestor_role`, `department`, `priority`
+and `original_message` (optionally `status`, `patient_identifier`,
+`assigned_person`). An empty `{}` body returns `400` with a hint — it means the
+scenario's HTTP module has no mapped fields. If the scenario simply echoes the
+dispatch payload back, the server still creates the ticket (with
+`department: "Reception"`, `priority: "Medium"`, unassigned) so it lands in the
+Operator's forwarding queue.
+
+---
+
 ## Deploying to production
 
 Three supported targets:
